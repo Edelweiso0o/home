@@ -4,21 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stardew Valley - Desafio de Presentes e Conquistas</title>
-  <!-- Corrigido o nome do arquivo CSS para styles.css -->
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
   <div class="stardew-container">
     
-    <!-- Top Bar com Botão Voltar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <a href="../index.html" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(0,0,0,0.15); color: #722f10; text-decoration: none; border-radius: 6px; font-size: 8px; font-weight: 600; border: 2px solid #b15d26; transition: background 0.2s;">
-        <i class="fa-solid fa-house"></i> Home
+    <!-- Cabeçalho Integrado com Home e Título -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 3px solid #b15d26; padding-bottom: 12px;">
+      <a href="../index.html" class="tab-btn" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 6px 10px;">
+        <i class="fa-solid fa-house"></i> Início
       </a>
+      <h1 style="margin: 0; font-size: 11px; text-align: right;">Painel Stardew Valley</h1>
     </div>
-
-    <h1>Stardew Valley - Painel do Fazendeiro</h1>
 
     <!-- MENU DE ABAS -->
     <div class="tabs-container">
@@ -73,7 +71,7 @@
 
         <div class="form-group" style="margin-bottom: 12px;">
           <label>Item da Rodada:</label>
-          <input type="text" id="inputItemUnico" list="listaItens" placeholder="Digite o item (ex: Ametista, Melão)...">
+          <input type="text" id="inputItemUnico" list="listaItens" placeholder="Digite o item...">
           <datalist id="listaItens"></datalist>
         </div>
 
@@ -188,7 +186,7 @@
     <!-- ABA 3: ENVIO COMPLETO -->
     <div id="aba-envio" class="tab-content">
       <div class="panel-box">
-        <h2>📦 Conquista: Envio Completo (Full Shipment)</h2>
+        <h2>📦 Conquista: Envio Completo</h2>
         <p style="font-size:7px; color:#722f10; margin-bottom: 12px; line-height: 1.4;">Envie pelo menos uma unidade de cada item embarcável do jogo para desbloquear a conquista.</p>
         
         <div class="progresso-barra">
