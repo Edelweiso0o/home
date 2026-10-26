@@ -1,0 +1,133 @@
+function atualizarItensCompletoStardew() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Itens");
+  
+  if (!sheet) {
+    sheet = ss.insertSheet("Itens");
+  }
+  
+  // Limpa o conteúdo antigo
+  sheet.clearContents();
+  
+  // Cabeçalho exato solicitado
+  sheet.appendRow(["ID_Item", "Nome_Item", "Categoria"]);
+  
+  var listaItens = [
+    // Recursos e Materiais
+    ["Fibra", "Recursos"], ["Madeira", "Recursos"], ["Madeira de Lei", "Recursos"], ["Pedra", "Recursos"],
+    ["Carvão", "Recursos"], ["Seiva", "Recursos"], ["Argila", "Recursos"], ["Minério de Cobre", "Recursos"],
+    ["Minério de Ferro", "Recursos"], ["Minério de Ouro", "Recursos"], ["Minério de Irídio", "Recursos"],
+    ["Minério Radioativo", "Recursos"], ["Barra de Cobre", "Recursos"], ["Barra de Ferro", "Recursos"],
+    ["Barra de Ouro", "Recursos"], ["Barra de Irídio", "Recursos"], ["Barra Radioativa", "Recursos"],
+    ["Quartzo", "Recursos"], ["Quartzo de Fogo", "Recursos"], ["Quartzo Refinado", "Recursos"],
+    ["Bateria", "Recursos"], ["Pilha de Lixo", "Recursos"], ["Cinza Húngara", "Recursos"],
+    ["Osso", "Recursos"], ["Carapaça", "Recursos"], ["Asa de Morcego", "Recursos"],
+    ["Essência Solar", "Recursos"], ["Essência do Vazio", "Recursos"], ["Resina de Carvalho", "Recursos"],
+    ["Xarope de Bordo", "Recursos"], ["Alcatrão de Pinheiro", "Recursos"], ["Madeira Maciça", "Recursos"],
+    ["Musgo", "Recursos"], ["Pólen de Cogumelo", "Recursos"], ["Fibra Raiz", "Recursos"],
+
+    // Iscas e Anzóis de Pesca
+    ["Isca", "Pesca"], ["Isca Magnética", "Pesca"], ["Isca Desafiadora", "Pesca"], ["Isca de Mosca", "Pesca"],
+    ["Isca Mágica", "Pesca"], ["Isca de Luxo", "Pesca"], ["Isca Silenciosa", "Pesca"], ["Isca de Culinária", "Pesca"],
+    ["Isca de Lula", "Pesca"], ["Anzol de Chumbo", "Pesca"], ["Boia de Cortiça", "Pesca"], ["Girador", "Pesca"],
+    ["Girador de Tesouro", "Pesca"], ["Anzol de Barbed", "Pesca"], ["Imã de Chumbo", "Pesca"],
+    ["Anzol de Esmeralda", "Pesca"], ["Anzol de Iridium", "Pesca"], ["Isca de Caranguejo", "Pesca"],
+
+    // Lavouras / Sementes / Frutas / Vegetais
+    ["Chirívia", "Lavouras"], ["Semente de Chirívia", "Lavouras"], ["Couve", "Lavouras"], ["Alho", "Lavouras"],
+    ["Batata", "Lavouras"], ["Couve-flor", "Lavouras"], ["Vagem", "Lavouras"], ["Morango", "Lavouras"],
+    ["Rabanete", "Lavouras"], ["Melão", "Lavouras"], ["Tomate", "Lavouras"], ["Mirtilo", "Lavouras"],
+    ["Milho", "Lavouras"], ["Pimentão", "Lavouras"], ["Berinjela", "Lavouras"], ["Abóbora", "Lavouras"],
+    ["Inhame", "Lavouras"], ["Cenoura", "Lavouras"], ["Abobrinha", "Lavouras"], ["Brócolis", "Lavouras"],
+    ["Fruta Antiga", "Lavouras"], ["Carambola", "Lavouras"], ["Ruibarbo", "Lavouras"], ["Fruta do Dragão", "Lavouras"],
+    ["Lúpulo", "Lavouras"], ["Girassol", "Lavouras"], ["Trigo", "Lavouras"], ["Beterraba", "Lavouras"],
+    ["Cranberries", "Lavouras"], ["Cenoura Doce", "Lavouras"], ["Yams", "Lavouras"], ["Bok Choy", "Lavouras"],
+    ["Alcachofra", "Lavouras"], ["Abacaxi", "Lavouras"], ["Manga", "Lavouras"], ["Banana", "Lavouras"],
+    ["Taro", "Lavouras"], ["Amora", "Lavouras"], ["Fruta Estrela", "Lavouras"], ["Couve de Bruxas", "Lavouras"],
+    ["Grão de Café", "Lavouras"], ["Feijão Verde", "Lavouras"],
+
+    // Flores
+    ["Narciso", "Flores"], ["Dente-de-Leão", "Flores"], ["Ervilha de Cheiro", "Flores"], ["Tulipa", "Flores"],
+    ["Jazz Azul", "Flores"], ["Ervilha", "Flores"], ["Papoula", "Flores"], ["Espora", "Flores"], ["Rosa das Fadas", "Flores"],
+
+    // Forrageio (Incluindo Amora-silvestre e Amora)
+    ["Amora-silvestre", "Forrageio"], ["Alho-poró", "Forrageio"], ["Cebolinha", "Forrageio"], ["Raiz-forte", "Forrageio"],
+    ["Morango Silvestre", "Forrageio"], ["Cereja Silvestre", "Forrageio"], ["Ervilha Doce", "Forrageio"], ["Uva", "Forrageio"],
+    ["Cogumelo Comum", "Forrageio"], ["Cogumelo Vermelho", "Forrageio"], ["Cogumelo Roxo", "Forrageio"], ["Cantarelo", "Forrageio"],
+    ["Morel", "Forrageio"], ["Açafrão", "Forrageio"], ["Inhame de Neve", "Forrageio"], ["Raiz de Inverno", "Forrageio"],
+    ["Cristal de Gelo", "Forrageio"], ["Fruta de Cacto", "Forrageio"], ["Coco", "Forrageio"], ["Morango da Caverna", "Forrageio"],
+    ["Avelã", "Forrageio"], ["Gengibre", "Forrageio"], ["Cogumelo Magma", "Forrageio"], ["Alho Selvagem", "Forrageio"],
+    ["Rabanete Silvestre", "Forrageio"],
+
+    // Peixes
+    ["Achigã", "Peixes"], ["Salmão", "Peixes"], ["Truta Arco-Íris", "Peixes"], ["Truta Marrom", "Peixes"],
+    ["Carpa", "Peixes"], ["Robalo", "Peixes"], ["Bagre", "Peixes"], ["Peixe-Sol", "Peixes"], ["Lança", "Peixes"],
+    ["Tainha", "Peixes"], ["Sardinha", "Peixes"], ["Atum", "Peixes"], ["Lula", "Peixes"], ["Polvo", "Peixes"],
+    ["Peixe-Bolha", "Peixes"], ["Esturjão", "Peixes"], ["Salmão Rei", "Peixes"], ["Linhado", "Peixes"],
+    ["Aruanã", "Peixes"], ["Enguia", "Peixes"], ["Tilápia", "Peixes"], ["Linguiça do Mar", "Peixes"],
+    ["Lagostim", "Peixes"], ["Caranguejo", "Peixes"], ["Lagosta", "Peixes"], ["Camarão", "Peixes"], ["Ostra", "Peixes"],
+    ["Mexilhão", "Peixes"], ["Caracol", "Peixes"], ["Berbigão", "Peixes"], ["Alga Marinha", "Peixes"],
+    ["Alga Verde", "Peixes"], ["Alga Branca", "Peixes"], ["Lula Gigante", "Peixes"], ["Lula Vampira", "Peixes"],
+    ["Peixe-Lenda", "Peixes"], ["Carpas Mutantes", "Peixes"], ["Peixe Gelo", "Peixes"], ["Peixe-Espada", "Peixes"],
+    ["Linguado", "Peixes"], ["Solha", "Peixes"], ["Peixe-Globo", "Peixes"], ["Peixe-Mandarim", "Peixes"],
+    ["Albacora", "Peixes"], ["Peixe-Papagaio", "Peixes"], ["Peixe-Leão", "Peixes"], ["Dourado", "Peixes"],
+    ["Salmão Sockeye", "Peixes"], ["Carpa de Esgoto", "Peixes"], ["Carpa de Madeira", "Peixes"],
+    ["Peixe Fantasma", "Peixes"], ["Carpa de Pedra", "Peixes"], ["Peixe de Lava", "Peixes"], ["Peixe Esqueleto", "Peixes"],
+    ["Peixe Noturno", "Peixes"], ["Enguia de Esgoto", "Peixes"], ["Tubarão", "Peixes"],
+
+    // Produtos Animais / Artesanais
+    ["Ovo", "Produtos Animais"], ["Ovo Grande", "Produtos Animais"], ["Ovo de Pato", "Produtos Animais"],
+    ["Ovo Dourado", "Produtos Animais"], ["Ovo do Vazio", "Produtos Animais"], ["Leite", "Produtos Animais"],
+    ["Leite Grande", "Produtos Animais"], ["Leite de Cabra", "Produtos Animais"], ["Leite Grande de Cabra", "Produtos Animais"],
+    ["Lã", "Produtos Animais"], ["Tecido", "Artesanais"], ["Trufa", "Produtos Animais"], ["Óleo de Trufa", "Artesanais"],
+    ["Queijo", "Artesanais"], ["Queijo de Cabra", "Artesanais"], ["Maionese", "Artesanais"],
+    ["Maionese de Pato", "Artesanais"], ["Maionese Dourada", "Artesanais"], ["Maionese do Vazio", "Artesanais"],
+    ["Mel", "Artesanais"], ["Geleia", "Artesanais"], ["Conserva", "Artesanais"], ["Vinho", "Artesanais"],
+    ["Suco", "Artesanais"], ["Cerveja", "Artesanais"], ["Cerveja Pale Ale", "Artesanais"], ["Hidromel", "Artesanais"],
+    ["Óleo", "Artesanais"], ["Açúcar", "Ingredientes"], ["Farinha de Trigo", "Ingredientes"], ["Vinagre", "Ingredientes"],
+    ["Arroz", "Ingredientes"], ["Pé de Coelho", "Produtos Animais"], ["Escama de Peixe", "Outros"],
+    ["Ovo de Slime", "Outros"], ["Geleia de Sombra", "Outros"],
+
+    // Minerais e Gemas
+    ["Esmeralda", "Minerais"], ["Aquamarine", "Minerais"], ["Rubi", "Minerais"], ["Ametista", "Minerais"],
+    ["Topázio", "Minerais"], ["Jade", "Minerais"], ["Diamante", "Minerais"], ["Manta Prismática", "Minerais"],
+    ["Quartzo Rosa", "Minerais"], ["Terra das Fadas", "Minerais"], ["Estrela de Frésia", "Minerais"],
+    ["Geodo", "Minerais"], ["Geodo Congelado", "Minerais"], ["Geodo Magmático", "Minerais"], ["Omni Geodo", "Minerais"],
+    ["Esqueleto de Neve", "Minerais"], ["Anfíbio Fóssil", "Minerais"], ["Nautilus Fóssil", "Minerais"],
+    ["Trilobite", "Minerais"], ["Jasper", "Minerais"], ["Kyanite", "Minerais"], ["Moonstone", "Minerais"],
+    ["Bixbite", "Minerais"], ["Magnesita", "Minerais"], ["Malachita", "Minerais"], ["Nephrite", "Minerais"],
+    ["Opal de Fogo", "Minerais"], ["Orpiment", "Minerais"], ["Peridoto", "Minerais"], ["Jaspe", "Minerais"],
+    ["Fosfeto", "Minerais"], ["Cianita", "Minerais"], ["Pedra Estelar", "Minerais"], ["Aerólito", "Minerais"],
+
+    // Culinária
+    ["Ovo Frito", "Culinária"], ["Omelete", "Culinária"], ["Salada", "Culinária"], ["Queijo Quente", "Culinária"],
+    ["Sopa de Chirívia", "Culinária"], ["Pizza", "Culinária"], ["Biscoito", "Culinária"],
+    ["Bolo de Chocolate", "Culinária"], ["Panquecas", "Culinária"], ["Hashbrowns", "Culinária"],
+    ["Torta de Ruibarbo", "Culinária"], ["Vinagrete", "Culinária"], ["Espaguete", "Culinária"], ["Pão", "Culinária"],
+    ["Rolo de Canela", "Culinária"], ["Salmão ao Molho", "Culinária"], ["Carpa Surpresa", "Culinária"],
+    ["Almoço do Fazendeiro", "Culinária"], ["Prato de Algas", "Culinária"], ["Biscoito de Abóbora", "Culinária"],
+    ["Guisado de Peixe", "Culinária"], ["Pudding de Ameixa", "Culinária"], ["Sorvete", "Culinária"],
+    ["Salada de Frutas", "Culinária"], ["Bolo Amarelo", "Culinária"], ["Bolo Rosa", "Culinária"],
+    ["Pudim de Arroz", "Culinária"], ["Cookie", "Culinária"], ["Biscoito da Sorte", "Culinária"],
+    ["Bife com Batata", "Culinária"], ["Sopa de Algas", "Culinária"], ["Sopa de Peixe", "Culinária"],
+    ["Mexidão de Frutos do Mar", "Culinária"], ["Sopa Escocesa", "Culinária"], ["Carpa Escabeche", "Culinária"],
+    ["Salmão Grelhado", "Culinária"], ["Tacos de Peixe", "Culinária"], ["Sopa Tropical", "Culinária"],
+    ["Espetinho", "Culinária"], ["Bolinho de Arroz", "Culinária"], ["Prato de Sobremesa", "Culinária"],
+    ["Prato de Frutas", "Culinária"],
+
+    // Utilitários e Outros
+    ["Bomba", "Utilitários"], ["Mega Bomba", "Utilitários"], ["Bomba Pequena", "Utilitários"],
+    ["Elixir de Vida", "Utilitários"], ["Poção de Monstro", "Utilitários"], ["Espantalho", "Utilitários"],
+    ["Aspersor de Irídio", "Utilitários"], ["Barril", "Utilitários"], ["Jarros de Conservas", "Utilitários"],
+    ["Cristalário", "Utilitários"], ["Fornalha", "Utilitários"], ["Pérolas", "Outros"],
+    ["Estilhaço de Cinder", "Outros"], ["Cinza de Osso", "Outros"]
+  ];
+
+  for (var i = 0; i < listaItens.length; i++) {
+    sheet.appendRow([i + 1, listaItens[i][0], listaItens[i][1]]);
+  }
+
+  sheet.autoResizeColumn(1);
+  sheet.autoResizeColumn(2);
+  sheet.autoResizeColumn(3);
+}

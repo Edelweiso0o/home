@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Stardew Valley - Desafio de Presentes e Conquistas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="stardew-container">
+    <h1>Stardew Valley - Painel do Fazendeiro</h1>
+
+    <!-- MENU DE ABAS -->
+    <div class="tabs-container">
+      <button class="tab-btn active" onclick="mudarAba('presentes', event)">🎁 Presentes</button>
+      <button class="tab-btn" onclick="mudarAba('culturas', event)">🌱 Monocultura/Policultura</button>
+      <button class="tab-btn" onclick="mudarAba('envio', event)">📦 Envio Completo</button>
+    </div>
+
+    <!-- ABA 1: PRESENTES -->
+    <div id="aba-presentes" class="tab-content active">
+      <div class="panel-box">
+        <h2>🎁 Lançamento de Presente</h2>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Ano:</label>
+            <select id="selectAno">
+              <option value="Ano 1">Ano 1</option>
+              <option value="Ano 2">Ano 2</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Estação:</label>
+            <select id="selectEstacao">
+              <option value="Primavera">Primavera</option>
+              <option value="Verão">Verão</option>
+              <option value="Outono">Outono</option>
+              <option value="Inverno">Inverno</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Semana:</label>
+            <select id="selectSemana">
+              <option value="Semana 1">Semana 1</option>
+              <option value="Semana 2">Semana 2</option>
+              <option value="Semana 3">Semana 3</option>
+              <option value="Semana 4">Semana 4</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Slot:</label>
+            <select id="selectSlot">
+              <option value="Presente 1">1º da Semana</option>
+              <option value="Presente 2">2º da Semana</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label>Item da Rodada:</label>
+          <input type="text" id="inputItemUnico" list="listaItens" placeholder="Digite o item...">
+          <datalist id="listaItens"></datalist>
+        </div>
+
+        <button class="btn-abrir" onclick="toggleChecklist()">👥 Selecionar Moradores (Checklist)</button>
+
+        <div id="checklistWrapper" class="checklist-wrapper oculto">
+          <div class="checklist-header">
+            <span>Marque os moradores que receberão este item:</span>
+            <div>
+              <button type="button" onclick="marcarTodos(true)">Marcar Todos</button>
+              <button type="button" onclick="marcarTodos(false)">Desmarcar Todos</button>
+            </div>
+          </div>
+          <div id="checklistContainer" class="checklist-grid">Carregando NPCs...</div>
+        </div>
+
+        <button class="btn-salvar-lote" onclick="salvarLote()">💾 Salvar na Planilha</button>
+        <div id="statusMsg"></div>
+      </div>
+
+      <div class="panel-box" style="margin-top: 20px;">
+        <h2>📋 Filtros de Presentes</h2>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Filtrar Ano:</label>
+            <select id="filtroAno" onchange="filtrarHistorico()">
+              <option value="Todos">Todos</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Filtrar Estação:</label>
+            <select id="filtroEstacao" onchange="filtrarHistorico()">
+              <option value="Todas">Todas</option>
+              <option value="Primavera">Primavera</option>
+              <option value="Verão">Verão</option>
+              <option value="Outono">Outono</option>
+              <option value="Inverno">Inverno</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Filtrar Semana:</label>
+            <select id="filtroSemana" onchange="filtrarHistorico()">
+              <option value="Todas">Todas</option>
+              <option value="Semana 1">Semana 1</option>
+              <option value="Semana 2">Semana 2</option>
+              <option value="Semana 3">Semana 3</option>
+              <option value="Semana 4">Semana 4</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Filtrar Slot:</label>
+            <select id="filtroSlot" onchange="filtrarHistorico()">
+              <option value="Todos">Todos</option>
+              <option value="Presente 1">1º Presente</option>
+              <option value="Presente 2">2º Presente</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top: 8px;">
+          <div class="form-group">
+            <label>Modo de Exibição:</label>
+            <select id="filtroModo" onchange="alternarModoExibicao()">
+              <option value="historico">Histórico de Lançamentos</option>
+              <option value="faltam">👥 Quem Não Recebeu</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="grupoSelectFaltam" style="display: none;">
+            <label>Selecione o Item:</label>
+            <select id="selectFaltamRodada" onchange="filtrarHistorico()">
+              <option value="">-- Escolha um item --</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="tabelaHistorico" class="tabela-registros">Carregando histórico...</div>
+      </div>
+    </div>
+
+    <!-- ABA 2: MONOCULTURA & POLICULTURA -->
+    <div id="aba-culturas" class="tab-content">
+      <div class="panel-box">
+        <h2>🌱 Conquistas de Culturas (Monocultura & Policultura)</h2>
+        <p style="font-size:7px; color:#722f10; margin-bottom: 12px;">Acompanhe o envio de 300 unidades de culturas específicas (Monocultura) e 15 unidades de cada cultura padrão (Policultura).</p>
+        
+        <h3 style="font-size:8px; color:#722f10; margin-top:10px;">Progresso da Monocultura (300 unidades de 1 item)</h3>
+        <div class="progresso-barra">
+          <div id="barraMonocultura" class="progresso-fill"></div>
+          <div id="textoMonocultura" class="progresso-texto">0 / 300</div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Item Escolhido para Monocultura:</label>
+          <input type="text" id="inputMonoculturaItem" placeholder="Ex: Chirívia, Morango..." onchange="salvarConquistasLocais()">
+          <label style="margin-top:4px;">Quantidade Enviada:</label>
+          <input type="number" id="inputMonoculturaQtd" min="0" max="300" value="0" oninput="atualizarProgressoCulturas()">
+        </div>
+
+        <h3 style="font-size:8px; color:#722f10; margin-top:15px;">Progresso da Policultura (15x de cada 15 culturas)</h3>
+        <div class="progresso-barra">
+          <div id="barraPolicultura" class="progresso-fill"></div>
+          <div id="textoPolicultura" class="progresso-texto">0 / 15 Culturas Concluídas</div>
+        </div>
+        <div id="checklistPolicultura" class="checklist-grid" style="max-height: 200px; margin-top: 8px;"></div>
+      </div>
+    </div>
+
+    <!-- ABA 3: ENVIO COMPLETO -->
+    <div id="aba-envio" class="tab-content">
+      <div class="panel-box">
+        <h2>📦 Conquista: Envio Completo (Full Shipment)</h2>
+        <p style="font-size:7px; color:#722f10; margin-bottom: 12px;">Envie pelo menos uma unidade de cada item embarcável do jogo para conseguir a conquista.</p>
+        
+        <div class="progresso-barra">
+          <div id="barraEnvio" class="progresso-fill"></div>
+          <div id="textoEnvio" class="progresso-texto">0 / 0 Itens</div>
+        </div>
+        
+        <div style="margin-bottom: 10px; display: flex; gap: 8px;">
+          <button class="btn-abrir" type="button" onclick="marcarTodosEnvio(true)">Marcar Todos</button>
+          <button class="btn-abrir" type="button" onclick="marcarTodosEnvio(false)">Desmarcar Todos</button>
+        </div>
+
+        <div id="checklistEnvio" class="checklist-grid" style="max-height: 300px;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
