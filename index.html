@@ -4,38 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dev Central Hub | Painel Inicial</title>
+
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+
+    <!-- Fonts & Icons externas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        dark: {
-                            bg: '#0b0f17',
-                            card: '#151c28',
-                            border: '#1f293d',
-                            accent: '#6366f1'
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- FontAwesome para Ícones -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
-        body { 
-            font-family: 'Inter', sans-serif; 
-        }
-        .font-mono-code {
-            font-family: 'Fira Code', monospace;
-        }
-    </style>
+
+    <!-- Estilo CSS Separado -->
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="bg-dark-bg text-slate-200 min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
 
@@ -208,21 +191,7 @@
         </div>
     </footer>
 
-    <!-- Script Relógio Local -->
-    <script>
-        function atualizarRelogio() {
-            const agora = new Date();
-            const horas = String(agora.getHours()).padStart(2, '0');
-            const minutos = String(agora.getMinutes()).padStart(2, '0');
-            const segundos = String(agora.getSeconds()).padStart(2, '0');
-            const el = document.getElementById('relogioLocal');
-            if (el) el.innerText = `${horas}:${minutos}:${segundos}`;
-        }
-        setInterval(atualizarRelogio, 1000);
-        atualizarRelogio();
-    </script>
+    <!-- Script JS Separado -->
+    <script src="js/main.js"></script>
 </body>
 </html>
-```
-
-Gerado o arquivo no editor ao lado! Você pode clicar no botão **Preview** no topo da tela para visualizar e testar como fica a página interativa.

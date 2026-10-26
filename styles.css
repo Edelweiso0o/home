@@ -1,0 +1,29 @@
+/* Configuracoes globais e Fontes */
+body { 
+    font-family: 'Inter', sans-serif; 
+}
+
+.font-mono-code {
+    font-family: 'Fira Code', monospace;
+}
+
+/* Cores customizadas no CSS */
+:root {
+    --bg-dark: #0b0f17;
+    --card-dark: #151c28;
+    --border-dark: #1f293d;
+    --accent-indigo: #6366f1;
+}
+
+/* Classes utilitarias personalizadas */
+.bg-dark-bg {
+    background-color: var(--bg-dark);
+}
+
+.bg-dark-card {
+    background-color: var(--card-dark);
+}
+
+.border-dark-border {
+    border-color: var(--border-dark);
+}
