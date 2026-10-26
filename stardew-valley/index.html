@@ -2,11 +2,22 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stardew Valley - Desafio de Presentes e Conquistas</title>
-  <link rel="stylesheet" href="style.css">
+  <!-- Corrigido o nome do arquivo CSS para styles.css -->
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
   <div class="stardew-container">
+    
+    <!-- Top Bar com Botão Voltar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <a href="../index.html" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(0,0,0,0.15); color: #722f10; text-decoration: none; border-radius: 6px; font-size: 8px; font-weight: 600; border: 2px solid #b15d26; transition: background 0.2s;">
+        <i class="fa-solid fa-house"></i> Home
+      </a>
+    </div>
+
     <h1>Stardew Valley - Painel do Fazendeiro</h1>
 
     <!-- MENU DE ABAS -->
@@ -27,6 +38,7 @@
             <select id="selectAno">
               <option value="Ano 1">Ano 1</option>
               <option value="Ano 2">Ano 2</option>
+              <option value="Ano 3">Ano 3</option>
             </select>
           </div>
 
@@ -61,7 +73,7 @@
 
         <div class="form-group" style="margin-bottom: 12px;">
           <label>Item da Rodada:</label>
-          <input type="text" id="inputItemUnico" list="listaItens" placeholder="Digite o item...">
+          <input type="text" id="inputItemUnico" list="listaItens" placeholder="Digite o item (ex: Ametista, Melão)...">
           <datalist id="listaItens"></datalist>
         </div>
 
@@ -78,18 +90,21 @@
           <div id="checklistContainer" class="checklist-grid">Carregando NPCs...</div>
         </div>
 
-        <button class="btn-salvar-lote" onclick="salvarLote()">💾 Salvar na Planilha</button>
+        <button class="btn-salvar-lote" onclick="salvarLote()">💾 Salvar Lançamento</button>
         <div id="statusMsg"></div>
       </div>
 
       <div class="panel-box" style="margin-top: 20px;">
-        <h2>📋 Filtros de Presentes</h2>
+        <h2>📋 Filtros & Histórico</h2>
         
         <div class="form-row">
           <div class="form-group">
             <label>Filtrar Ano:</label>
             <select id="filtroAno" onchange="filtrarHistorico()">
               <option value="Todos">Todos</option>
+              <option value="Ano 1">Ano 1</option>
+              <option value="Ano 2">Ano 2</option>
+              <option value="Ano 3">Ano 3</option>
             </select>
           </div>
           <div class="form-group">
@@ -147,9 +162,9 @@
     <div id="aba-culturas" class="tab-content">
       <div class="panel-box">
         <h2>🌱 Conquistas de Culturas (Monocultura & Policultura)</h2>
-        <p style="font-size:7px; color:#722f10; margin-bottom: 12px;">Acompanhe o envio de 300 unidades de culturas específicas (Monocultura) e 15 unidades de cada cultura padrão (Policultura).</p>
+        <p style="font-size:7px; color:#722f10; margin-bottom: 12px; line-height: 1.4;">Acompanhe o envio de 300 unidades de uma cultura (Monocultura) e 15 unidades de cada cultura padrão (Policultura).</p>
         
-        <h3 style="font-size:8px; color:#722f10; margin-top:10px;">Progresso da Monocultura (300 unidades de 1 item)</h3>
+        <h3 style="font-size:8px; color:#722f10; margin-top:10px;">Progresso da Monocultura (300 unidades)</h3>
         <div class="progresso-barra">
           <div id="barraMonocultura" class="progresso-fill"></div>
           <div id="textoMonocultura" class="progresso-texto">0 / 300</div>
@@ -157,11 +172,11 @@
         <div class="form-group" style="margin-bottom:12px;">
           <label>Item Escolhido para Monocultura:</label>
           <input type="text" id="inputMonoculturaItem" placeholder="Ex: Chirívia, Morango..." onchange="salvarConquistasLocais()">
-          <label style="margin-top:4px;">Quantidade Enviada:</label>
+          <label style="margin-top:8px;">Quantidade Enviada:</label>
           <input type="number" id="inputMonoculturaQtd" min="0" max="300" value="0" oninput="atualizarProgressoCulturas()">
         </div>
 
-        <h3 style="font-size:8px; color:#722f10; margin-top:15px;">Progresso da Policultura (15x de cada 15 culturas)</h3>
+        <h3 style="font-size:8px; color:#722f10; margin-top:15px; margin-bottom: 6px;">Progresso da Policultura (15x de cada 15 culturas)</h3>
         <div class="progresso-barra">
           <div id="barraPolicultura" class="progresso-fill"></div>
           <div id="textoPolicultura" class="progresso-texto">0 / 15 Culturas Concluídas</div>
@@ -174,7 +189,7 @@
     <div id="aba-envio" class="tab-content">
       <div class="panel-box">
         <h2>📦 Conquista: Envio Completo (Full Shipment)</h2>
-        <p style="font-size:7px; color:#722f10; margin-bottom: 12px;">Envie pelo menos uma unidade de cada item embarcável do jogo para conseguir a conquista.</p>
+        <p style="font-size:7px; color:#722f10; margin-bottom: 12px; line-height: 1.4;">Envie pelo menos uma unidade de cada item embarcável do jogo para desbloquear a conquista.</p>
         
         <div class="progresso-barra">
           <div id="barraEnvio" class="progresso-fill"></div>
@@ -182,8 +197,8 @@
         </div>
         
         <div style="margin-bottom: 10px; display: flex; gap: 8px;">
-          <button class="btn-abrir" type="button" onclick="marcarTodosEnvio(true)">Marcar Todos</button>
-          <button class="btn-abrir" type="button" onclick="marcarTodosEnvio(false)">Desmarcar Todos</button>
+          <button class="btn-abrir" type="button" style="margin-bottom: 0;" onclick="marcarTodosEnvio(true)">Marcar Todos</button>
+          <button class="btn-abrir" type="button" style="margin-bottom: 0;" onclick="marcarTodosEnvio(false)">Desmarcar Todos</button>
         </div>
 
         <div id="checklistEnvio" class="checklist-grid" style="max-height: 300px;"></div>
@@ -192,6 +207,6 @@
 
   </div>
 
-  <script src="app.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
