@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dev Central Hub | Painel Inicial</title>
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#0b0f17',
+                            card: '#151c28',
+                            border: '#1f293d',
+                            accent: '#6366f1'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome para Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+        }
+        .font-mono-code {
+            font-family: 'Fira Code', monospace;
+        }
+    </style>
+</head>
+<body class="bg-dark-bg text-slate-200 min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+    <!-- Navbar / Header -->
+    <header class="border-b border-dark-border bg-dark-card/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3.5 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                    <i class="fa-solid fa-terminal text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold text-white tracking-wide">Dev Central Hub</h1>
+                    <p class="text-[11px] text-slate-400 font-mono-code">localhost & web apps portal</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <div class="hidden sm:flex items-center space-x-2 bg-dark-bg px-3 py-1.5 rounded-lg border border-dark-border text-xs text-slate-400 font-mono-code">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="relogioLocal">00:00:00</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8 w-full flex-grow space-y-8">
+
+        <!-- Banner de Boas-vindas -->
+        <div class="bg-gradient-to-r from-indigo-950/40 via-dark-card to-dark-card border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
+            <div class="relative z-10 max-w-2xl space-y-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">Portal de Navegação</span>
+                <h2 class="text-2xl font-bold text-white tracking-tight">Painel Principal de Projetos</h2>
+                <p class="text-sm text-slate-400 leading-relaxed">Acesso rápido aos seus ambientes locais e projetos hospedados no GitHub Pages em um único lugar.</p>
+            </div>
+        </div>
+
+        <!-- SEÇÃO 1: Projetos Online (GitHub Pages) -->
+        <section class="space-y-4">
+            <div class="flex items-center justify-between border-b border-dark-border pb-2">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-brands fa-github text-indigo-400"></i>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Projetos Publicados</h3>
+                </div>
+                <span class="text-xs text-slate-500 font-mono-code">GitHub Pages</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                
+                <!-- Card: Controle de Gastos -->
+                <a href="controle-gastos/" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-start">
+                            <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition duration-200">
+                                <i class="fa-solid fa-wallet text-lg"></i>
+                            </div>
+                            <span class="text-[10px] font-mono-code bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">Online</span>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-base group-hover:text-indigo-400 transition">Controle de Gastos</h4>
+                            <p class="text-xs text-slate-400 mt-1">Gestão financeira pessoal com cartão de crédito, despesas e rendas integradas ao Google Sheets.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-dark-border/50 flex justify-between items-center text-xs text-slate-500 group-hover:text-slate-300 font-mono-code">
+                        <span>/controle-gastos/</span>
+                        <i class="fa-solid fa-arrow-right text-xs group-hover:translate-x-1 transition"></i>
+                    </div>
+                </a>
+
+                <!-- Card: Stardew Valley Gift Tracker -->
+                <a href="stardew-valley/" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-start">
+                            <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition duration-200">
+                                <i class="fa-solid fa-wheat-awn text-lg"></i>
+                            </div>
+                            <span class="text-[10px] font-mono-code bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">Online</span>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-base group-hover:text-indigo-400 transition">Stardew Valley Tracker</h4>
+                            <p class="text-xs text-slate-400 mt-1">Rastreamento de presentes para NPCs, progresso de monocultura, policultura e conquistas.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-dark-border/50 flex justify-between items-center text-xs text-slate-500 group-hover:text-slate-300 font-mono-code">
+                        <span>/stardew-valley/</span>
+                        <i class="fa-solid fa-arrow-right text-xs group-hover:translate-x-1 transition"></i>
+                    </div>
+                </a>
+
+            </div>
+        </section>
+
+        <!-- SEÇÃO 2: Serviços & Localhost -->
+        <section class="space-y-4">
+            <div class="flex items-center justify-between border-b border-dark-border pb-2">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-network-wired text-indigo-400"></i>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Atalhos Localhost</h3>
+                </div>
+                <span class="text-xs text-slate-500 font-mono-code">Servidores Locais</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Port 3000 -->
+                <a href="http://localhost:3000" target="_blank" class="bg-dark-card border border-dark-border hover:border-slate-600 p-4 rounded-xl transition flex items-center justify-between group">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400">
+                            <i class="fa-solid fa-server text-xs"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-bold text-white group-hover:text-indigo-400 transition">Localhost:3000</h5>
+                            <p class="text-[10px] text-slate-500 font-mono-code">Node / React / Web</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-600 group-hover:text-slate-400 transition"></i>
+                </a>
+
+                <!-- Port 8080 -->
+                <a href="http://localhost:8080" target="_blank" class="bg-dark-card border border-dark-border hover:border-slate-600 p-4 rounded-xl transition flex items-center justify-between group">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400">
+                            <i class="fa-solid fa-server text-xs"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-bold text-white group-hover:text-indigo-400 transition">Localhost:8080</h5>
+                            <p class="text-[10px] text-slate-500 font-mono-code">HTTP Server / Dev</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-600 group-hover:text-slate-400 transition"></i>
+                </a>
+
+                <!-- Port 5500 (Live Server) -->
+                <a href="http://localhost:5500" target="_blank" class="bg-dark-card border border-dark-border hover:border-slate-600 p-4 rounded-xl transition flex items-center justify-between group">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400">
+                            <i class="fa-solid fa-bolt text-xs"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-bold text-white group-hover:text-indigo-400 transition">Localhost:5500</h5>
+                            <p class="text-[10px] text-slate-500 font-mono-code">VS Code Live Server</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-600 group-hover:text-slate-400 transition"></i>
+                </a>
+
+                <!-- Port 8000 -->
+                <a href="http://localhost:8000" target="_blank" class="bg-dark-card border border-dark-border hover:border-slate-600 p-4 rounded-xl transition flex items-center justify-between group">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400">
+                            <i class="fa-solid fa-cube text-xs"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-bold text-white group-hover:text-indigo-400 transition">Localhost:8000</h5>
+                            <p class="text-[10px] text-slate-500 font-mono-code">API / Backend</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-600 group-hover:text-slate-400 transition"></i>
+                </a>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-dark-border py-4 bg-dark-card/30">
+        <div class="max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-500 font-mono-code">
+            <span>Dev Central Hub</span>
+            <span>GitHub Pages</span>
+        </div>
+    </footer>
+
+    <!-- Script Relógio Local -->
+    <script>
+        function atualizarRelogio() {
+            const agora = new Date();
+            const horas = String(agora.getHours()).padStart(2, '0');
+            const minutos = String(agora.getMinutes()).padStart(2, '0');
+            const segundos = String(agora.getSeconds()).padStart(2, '0');
+            const el = document.getElementById('relogioLocal');
+            if (el) el.innerText = `${horas}:${minutos}:${segundos}`;
+        }
+        setInterval(atualizarRelogio, 1000);
+        atualizarRelogio();
+    </script>
+</body>
+</html>
+```
+
+Gerado o arquivo no editor ao lado! Você pode clicar no botão **Preview** no topo da tela para visualizar e testar como fica a página interativa.
