@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dev Central Hub | Painel Inicial</title>
+    <title>Painel de Projetos | Início</title>
 
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
@@ -47,7 +47,7 @@
 </head>
 <body class="bg-dark-bg text-slate-200 min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
 
-    <!-- Navbar / Header -->
+    <!-- Cabeçalho / Navbar -->
     <header class="border-b border-dark-border bg-dark-card/50 backdrop-blur-md sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 py-3.5 flex justify-between items-center">
             <div class="flex items-center space-x-3">
@@ -55,8 +55,8 @@
                     <i class="fa-solid fa-terminal text-lg"></i>
                 </div>
                 <div>
-                    <h1 class="text-base font-bold text-white tracking-wide">Dev Central Hub</h1>
-                    <p class="text-[11px] text-slate-400 font-mono-code">web apps portal</p>
+                    <h1 class="text-base font-bold text-white tracking-wide">Central de Projetos</h1>
+                    <p class="text-[11px] text-slate-400 font-mono-code">portal de aplicações web</p>
                 </div>
             </div>
             <div class="flex items-center space-x-3">
@@ -68,24 +68,24 @@
         </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Conteúdo Principal -->
     <main class="max-w-7xl mx-auto px-4 py-8 w-full flex-grow space-y-8">
 
         <!-- Banner de Boas-vindas -->
         <div class="bg-gradient-to-r from-indigo-950/40 via-dark-card to-dark-card border border-indigo-500/20 p-6 rounded-2xl relative overflow-hidden">
             <div class="relative z-10 max-w-2xl space-y-2">
-                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">Portal de Navegação</span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">Início</span>
                 <h2 class="text-2xl font-bold text-white tracking-tight">Painel Principal de Projetos</h2>
-                <p class="text-sm text-slate-400 leading-relaxed">Acesso rápido aos seus projetos e utilitários em um único lugar.</p>
+                <p class="text-sm text-slate-400 leading-relaxed">Acesso rápido aos seus módulos e utilitários em um único lugar.</p>
             </div>
         </div>
 
-        <!-- SEÇÃO: Projetos -->
+        <!-- Seção: Aplicações -->
         <section class="space-y-4">
             <div class="flex items-center justify-between border-b border-dark-border pb-2">
                 <div class="flex items-center space-x-2">
                     <i class="fa-solid fa-cubes text-indigo-400"></i>
-                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Aplicações</h3>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Aplicações Disponíveis</h3>
                 </div>
                 <span class="text-xs text-slate-500 font-mono-code">Módulos</span>
             </div>
@@ -112,7 +112,7 @@
                     </div>
                 </a>
 
-                <!-- Card: Stardew Valley Gift Tracker -->
+                <!-- Card: Stardew Valley -->
                 <a href="stardew-valley/index.html" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
                     <div class="space-y-3">
                         <div class="flex justify-between items-start">
@@ -122,8 +122,8 @@
                             <span class="text-[10px] font-mono-code bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">Ativo</span>
                         </div>
                         <div>
-                            <h4 class="font-bold text-white text-base group-hover:text-indigo-400 transition">Stardew Valley Tracker</h4>
-                            <p class="text-xs text-slate-400 mt-1">Rastreamento de presentes para NPCs, progresso de monocultura, policultura e conquistas.</p>
+                            <h4 class="font-bold text-white text-base group-hover:text-indigo-400 transition">Painel Stardew Valley</h4>
+                            <p class="text-xs text-slate-400 mt-1">Rastreamento de presentes para moradores, progresso de monocultura, policultura e conquistas.</p>
                         </div>
                     </div>
                     <div class="mt-4 pt-3 border-t border-dark-border/50 flex justify-between items-center text-xs text-slate-500 group-hover:text-slate-300 font-mono-code">
@@ -137,15 +137,15 @@
 
     </main>
 
-    <!-- Footer -->
+    <!-- Rodapé -->
     <footer class="border-t border-dark-border py-4 bg-dark-card/30">
         <div class="max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-500 font-mono-code">
-            <span>Dev Central Hub</span>
+            <span>Central de Projetos</span>
             <span>Local & Web</span>
         </div>
     </footer>
 
-    <!-- Scripts JavaScript Incorporados -->
+    <!-- Scripts JavaScript -->
     <script>
         if (typeof tailwind !== 'undefined') {
             tailwind.config = {
