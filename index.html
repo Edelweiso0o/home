@@ -8,17 +8,45 @@
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 
-    <!-- Fonts & Icons externas -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Estilo CSS Separado -->
-    <link rel="stylesheet" href="css/styles.css">
+    <!-- FontAwesome para Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Estilos CSS Incorporados -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+        }
+
+        .font-mono-code {
+            font-family: 'Fira Code', monospace;
+        }
+
+        /* Variáveis de Cores Temáticas */
+        :root {
+            --bg-dark: #0b0f17;
+            --card-dark: #151c28;
+            --border-dark: #1f293d;
+            --accent-indigo: #6366f1;
+        }
+
+        /* Utility classes para o tema escuro */
+        .bg-dark-bg {
+            background-color: var(--bg-dark);
+        }
+
+        .bg-dark-card {
+            background-color: var(--card-dark);
+        }
+
+        .border-dark-border {
+            border-color: var(--border-dark);
+        }
+    </style>
 </head>
 <body class="bg-dark-bg text-slate-200 min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
 
@@ -68,7 +96,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 
                 <!-- Card: Controle de Gastos -->
-                <a href="controle-gastos/" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
+                <a href="controle-gastos/index.html" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
                     <div class="space-y-3">
                         <div class="flex justify-between items-start">
                             <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition duration-200">
@@ -88,7 +116,7 @@
                 </a>
 
                 <!-- Card: Stardew Valley Gift Tracker -->
-                <a href="stardew-valley/" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
+                <a href="stardew-valley/index.html" class="group bg-dark-card border border-dark-border hover:border-indigo-500/50 p-5 rounded-xl transition duration-200 flex flex-col justify-between hover:shadow-lg hover:shadow-indigo-500/5">
                     <div class="space-y-3">
                         <div class="flex justify-between items-start">
                             <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition duration-200">
@@ -191,7 +219,45 @@
         </div>
     </footer>
 
-    <!-- Script JS Separado -->
-    <script src="js/main.js"></script>
+    <!-- Scripts JavaScript Incorporados -->
+    <script>
+        // Configuração de temas para o Tailwind CDN
+        if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
+                darkMode: 'class',
+                theme: {
+                    extend: {
+                        colors: {
+                            dark: {
+                                bg: '#0b0f17',
+                                card: '#151c28',
+                                border: '#1f293d',
+                                accent: '#6366f1'
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        // Atualizador do Relógio no Topo
+        function atualizarRelogio() {
+            const agora = new Date();
+            const horas = String(agora.getHours()).padStart(2, '0');
+            const minutos = String(agora.getMinutes()).padStart(2, '0');
+            const segundos = String(agora.getSeconds()).padStart(2, '0');
+            
+            const elementoRelogio = document.getElementById('relogioLocal');
+            if (elementoRelogio) {
+                elementoRelogio.innerText = `${horas}:${minutos}:${segundos}`;
+            }
+        }
+
+        // Inicialização dos eventos
+        document.addEventListener('DOMContentLoaded', () => {
+            setInterval(atualizarRelogio, 1000);
+            atualizarRelogio();
+        });
+    </script>
 </body>
 </html>
