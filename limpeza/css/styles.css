@@ -1,0 +1,41 @@
+/* Fontes e Estilização Geral do CleanQuest HQ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Fira+Code:wght@400;500;600;700&display=swap');
+
+body { 
+    font-family: 'Inter', sans-serif; 
+}
+
+.font-mono-code {
+    font-family: 'Fira Code', monospace;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #06b6d4;
+}
+
+/* Animações e Pulso para Missões Atrasadas/Urgentes */
+@keyframes pulse-urgency {
+    0%, 100% { 
+        border-color: rgba(245, 158, 11, 0.4); 
+    }
+    50% { 
+        border-color: rgba(239, 68, 68, 0.9); 
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.2); 
+    }
+}
+
+.card-urgent {
+    animation: pulse-urgency 2s infinite ease-in-out;
+}
