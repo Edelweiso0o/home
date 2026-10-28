@@ -13,7 +13,7 @@ window.onload = function() {
 function exibirVersaoData() {
     const elemento = document.getElementById('labelVersaoData');
     if (elemento) {
-        elemento.innerText = "v2.2.1 • 17/10/2026 07:32";
+        elemento.innerText = "v2.2.4 • 28/10/2026 18:10";
     }
 }
 
@@ -592,7 +592,7 @@ function fecharModalRegistro() {
 function adicionarLinhaSubItem(tipoSub = 'debito', desc = '', val = '', focar = false) {
     const container = document.getElementById('listaSubItensContainer');
     const div = document.createElement('div');
-    div.className = "flex items-center space-x-2 sub-item-linha";
+    div.className = "flex items-center space-x-1.5 sub-item-linha";
     
     let btnClass = tipoSub === 'credito' 
         ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' 
@@ -601,12 +601,16 @@ function adicionarLinhaSubItem(tipoSub = 'debito', desc = '', val = '', focar = 
     let btnTitle = tipoSub === 'credito' ? 'Tipo: Cupom/Crédito (-)' : 'Tipo: Débito (+)';
 
     div.innerHTML = `
-        <input type="text" list="listaSugestoesItens" placeholder="Nome do item..." value="${desc}" class="flex-grow bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-3 py-1.5 outline-none focus:border-indigo-500 item-desc">
-        <input type="text" placeholder="R$ 0,00" value="${val}" oninput="mascaraValorBanco(this); validarSomaItensCartao()" class="w-24 bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-3 py-1.5 outline-none focus:border-indigo-500 item-valor">
+        <input type="text" list="listaSugestoesItens" placeholder="Nome do item..." value="${desc}" onchange="aoSelecionarItemSub(this)" class="flex-grow bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500 item-desc">
+        <input type="text" placeholder="R$ 0,00" value="${val}" oninput="mascaraValorBanco(this); validarSomaItensCartao()" class="w-20 bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500 item-valor">
         <input type="hidden" class="item-tipo" value="${tipoSub}">
         <button type="button" onclick="alternarTipoSubItem(this)" class="w-7 h-7 rounded-lg border flex items-center justify-center transition ${btnClass}" title="${btnTitle}">
             ${btnIcon}
         </button>
+        <div class="flex flex-col -space-y-1">
+            <button type="button" onclick="moverSubItem(this, 'cima')" class="text-slate-400 hover:text-indigo-600 px-1 text-[9px]" title="Mover para cima"><i class="fa-solid fa-caret-up"></i></button>
+            <button type="button" onclick="moverSubItem(this, 'baixo')" class="text-slate-400 hover:text-indigo-600 px-1 text-[9px]" title="Mover para baixo"><i class="fa-solid fa-caret-down"></i></button>
+        </div>
         <button type="button" onclick="removerLinhaSubItem(this)" class="text-rose-400 hover:text-rose-600 px-1" title="Excluir item"><i class="fa-solid fa-trash-can text-xs"></i></button>
     `;
     container.appendChild(div);
@@ -616,6 +620,57 @@ function adicionarLinhaSubItem(tipoSub = 'debito', desc = '', val = '', focar = 
         if (inputDesc) inputDesc.focus();
     }
     validarSomaItensCartao();
+}
+
+function moverSubItem(btn, direcao) {
+    const linhaAtual = btn.closest('.sub-item-linha');
+    if (direcao === 'cima') {
+        const linhaAnterior = linhaAtual.previousElementSibling;
+        if (linhaAnterior) {
+            linhaAtual.parentNode.insertBefore(linhaAtual, linhaAnterior);
+        }
+    } else if (direcao === 'baixo') {
+        const linhaProxima = linhaAtual.nextElementSibling;
+        if (linhaProxima) {
+            linhaAtual.parentNode.insertBefore(linhaProxima, linhaAtual);
+        }
+    }
+    validarSomaItensCartao();
+}
+
+function aoSelecionarItemSub(inputDesc) {
+    const nomeEscolhido = inputDesc.value.trim();
+    if (!nomeEscolhido) return;
+
+    const itemEncontrado = dadosGlobaisItensCartao.slice().reverse().find(i => i.descricao.toLowerCase() === nomeEscolhido.toLowerCase());
+
+    if (itemEncontrado) {
+        const linha = inputDesc.closest('.sub-item-linha');
+        const inputValor = linha.querySelector('.item-valor');
+        const inputTipo = linha.querySelector('.item-tipo');
+        const btnTipo = linha.querySelector('button[title*="Tipo:"]');
+
+        if (inputValor && itemEncontrado.valor) {
+            inputValor.value = formatarMoeda(itemEncontrado.valor);
+        }
+
+        if (inputTipo && btnTipo) {
+            const tipoSalvo = itemEncontrado.tipoSub || 'debito';
+            inputTipo.value = tipoSalvo;
+
+            if (tipoSalvo === 'credito') {
+                btnTipo.className = "w-7 h-7 rounded-lg border flex items-center justify-center transition bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100";
+                btnTipo.innerHTML = '<i class="fa-solid fa-minus text-xs"></i>';
+                btnTipo.title = 'Tipo: Cupom/Crédito (-)';
+            } else {
+                btnTipo.className = "w-7 h-7 rounded-lg border flex items-center justify-center transition bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200";
+                btnTipo.innerHTML = '<i class="fa-solid fa-plus text-xs"></i>';
+                btnTipo.title = 'Tipo: Débito (+)';
+            }
+        }
+
+        validarSomaItensCartao();
+    }
 }
 
 function alternarTipoSubItem(btn) {

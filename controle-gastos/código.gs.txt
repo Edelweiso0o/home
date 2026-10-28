@@ -1,0 +1,749 @@
+/**
+ * Versão: 7.1.0
+ * Projeto: Controle de Gastos (Backend - Google Apps Script)
+ * Descrição: Reorganização física segura baseada no nome do cabeçalho (mapeamento dinâmico) para evitar perda ou inversão de dados.
+ */
+
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var params = e.parameter;
+    var action = params.action;
+    
+    verificarOuCriarAbaItens(ss);
+    verificarOuReorganizarAbaCartaoSegura(ss);
+    
+    if (action === 'ler') {
+      var dadosRendas = lerAba(ss.getSheetByName('Rendas'), 'Rendas');
+      var dadosDespesas = lerAba(ss.getSheetByName('Despesas'), 'Despesas');
+      var dadosCartao = lerAbaCartao(ss.getSheetByName('CartaoDeCredito'));
+      var dadosItens = lerAbaItens(ss.getSheetByName('ItensCartao'));
+      
+      var todasTransacoes = dadosRendas.concat(dadosDespesas, dadosCartao);
+      
+      todasTransacoes.sort(function(a, b) {
+        var tempoA = converterDataParaTimestamp(a.data);
+        var tempoB = converterDataParaTimestamp(b.data);
+        return tempoB - tempoA;
+      });
+      
+      var resultado = {
+        transacoes: todasTransacoes,
+        itensCartao: dadosItens
+      };
+      return respJSON(resultado);
+    }
+    
+    if (action === 'vincularManualLote') {
+      var idAntigo = parseInt(params.idAntigo, 10);
+      var novoIdCompra = parseInt(params.novoIdCompra, 10);
+      
+      var sheetItens = ss.getSheetByName('ItensCartao');
+      if (!sheetItens) return respJSON({result: 'error', message: 'Aba ItensCartao não encontrada'});
+      
+      var lastRow = sheetItens.getLastRow();
+      if (lastRow < 2) return respJSON({result: 'success', acao: 'vincularManualLote', alterados: 0});
+      
+      var rangeIds = sheetItens.getRange(2, 1, lastRow - 1, 1);
+      var valoresIds = rangeIds.getValues();
+      var alterados = 0;
+      
+      for (var i = 0; i < valoresIds.length; i++) {
+        var idAtual = parseInt(valoresIds[i][0], 10);
+        if (idAtual === idAntigo) {
+          sheetItens.getRange(i + 2, 1).setNumberFormat("0").setValue(novoIdCompra);
+          alterados++;
+        }
+      }
+      
+      formatarPlanilhas(ss);
+      return respJSON({result: 'success', acao: 'vincularManualLote', alterados: alterados});
+    }
+    
+    if (action === 'atualizarIdSubItemIndividual') {
+      var rowItem = parseInt(params.rowItem, 10);
+      var novoId = parseInt(params.novoId, 10);
+      
+      var sheetItens = ss.getSheetByName('ItensCartao');
+      if (!sheetItens) return respJSON({result: 'error', message: 'Aba ItensCartao não encontrada'});
+      
+      if (rowItem >= 2 && !isNaN(novoId)) {
+        sheetItens.getRange(rowItem, 1).setNumberFormat("0").setValue(novoId);
+        formatarPlanilhas(ss);
+        return respJSON({result: 'success', acao: 'atualizarIdSubItemIndividual'});
+      }
+      return respJSON({result: 'error', message: 'Parâmetros inválidos'});
+    }
+    
+    if (action === 'deletarSubItem') {
+      var rowItem = parseInt(params.rowItem, 10);
+      var sheetItens = ss.getSheetByName('ItensCartao');
+      if (!sheetItens) return respJSON({result: 'error', message: 'Aba ItensCartao não encontrada'});
+      
+      if (rowItem >= 2) {
+        sheetItens.deleteRow(rowItem);
+        formatarPlanilhas(ss);
+        return respJSON({result: 'success', acao: 'deletarSubItem'});
+      }
+      return respJSON({result: 'error', message: 'Linha inválida'});
+    }
+    
+    if (action === 'inserir') {
+      var tipo = params.tipo;
+      var sheet = ss.getSheetByName(tipo);
+      if (!sheet) return respJSON({result: 'error', message: 'Aba ' + tipo + ' não encontrada'});
+      
+      var dataStr = String(params.data || '');
+      var valNum = parseFloat(params.valor || 0);
+      var descStr = String(params.descricao || '');
+      var catStr = String(params.categoria || '');
+      var formaStr = String(params.forma || '');
+      var faturaMesInicial = parseInt(params.faturaMes || '1', 10);
+      var parcelaStr = String(params.parcela || '1/1');
+      
+      if (tipo === 'CartaoDeCredito') {
+        var totalParcelas = 1;
+        if (parcelaStr.includes('/')) {
+          var partesP = parcelaStr.split('/');
+          totalParcelas = parseInt(partesP[1], 10) || 1;
+        }
+        
+        var novoIdNum = obterProximoIdNumerico(sheet);
+        var itensParsed = [];
+        if (params.itensJson) {
+          try { itensParsed = JSON.parse(params.itensJson); } catch(err) {}
+        }
+        
+        var sheetItens = ss.getSheetByName('ItensCartao');
+        
+        for (var i = 0; i < totalParcelas; i++) {
+          var numParcelaAtual = i + 1;
+          var strParcelaFormatada = numParcelaAtual + '/' + totalParcelas;
+          
+          var mesCalculado = faturaMesInicial + i;
+          while (mesCalculado > 12) {
+            mesCalculado -= 12;
+          }
+          var strFaturaMes = String(mesCalculado).padStart(2, '0');
+          
+          // Ordem: ID, Data, Mês Fatura, Estabelecimento, Categoria, Parcela, Valor
+          var rowData = [novoIdNum, dataStr, strFaturaMes, descStr, catStr, "'" + strParcelaFormatada, valNum];
+          sheet.appendRow(rowData);
+          var lastRow = sheet.getLastRow();
+          
+          sheet.getRange(lastRow, 1).setNumberFormat("0").setValue(novoIdNum);
+          sheet.getRange(lastRow, 2).setNumberFormat("@").setValue(dataStr);
+          sheet.getRange(lastRow, 3).setNumberFormat("@").setValue(strFaturaMes);
+          sheet.getRange(lastRow, 6).setNumberFormat("@").setValue("'" + strParcelaFormatada);
+          sheet.getRange(lastRow, 7).setNumberFormat("R$ #,##0.00").setValue(valNum);
+          
+          if (itensParsed.length > 0) {
+            salvarItensPorIdCompra(sheetItens, novoIdNum, itensParsed);
+          }
+        }
+        
+      } else {
+        var rowData = [];
+        if (tipo === 'Rendas') {
+          rowData = [dataStr, valNum, descStr, catStr];
+        } else if (tipo === 'Despesas') {
+          rowData = [dataStr, valNum, descStr, catStr, formaStr];
+        }
+        sheet.appendRow(rowData);
+        var lastRow = sheet.getLastRow();
+        sheet.getRange(lastRow, 1).setNumberFormat("@").setValue(dataStr);
+      }
+      
+      formatarPlanilhas(ss);
+      return respJSON({result: 'success', acao: 'inserir'});
+    }
+    
+    if (action === 'editar') {
+      var tipo = params.tipo;
+      var sheet = ss.getSheetByName(tipo);
+      if (!sheet) return respJSON({result: 'error', message: 'Aba ' + tipo + ' não encontrada'});
+      
+      var rowIndex = parseInt(params.rowIndex);
+      var idCompraParam = parseInt(params.idCompra || 0, 10);
+      var dataStr = String(params.data || '');
+      var valNum = parseFloat(params.valor || 0);
+      var descStr = String(params.descricao || '');
+      var catStr = String(params.categoria || '');
+      var formaStr = String(params.forma || '');
+      var faturaMesInicial = parseInt(params.faturaMes || '1', 10);
+      var parcelaStr = String(params.parcela || '1/1');
+      
+      if (tipo === 'CartaoDeCredito') {
+        var lastCol = sheet.getLastColumn();
+        if (!idCompraParam || isNaN(idCompraParam)) {
+          if (lastCol >= 7 && rowIndex >= 2) {
+            idCompraParam = parseInt(sheet.getRange(rowIndex, 1).getValue(), 10) || 0;
+          }
+        }
+        
+        var totalParcelasDesejadas = 1;
+        if (parcelaStr.includes('/')) {
+          var partesP = parcelaStr.split('/');
+          totalParcelasDesejadas = parseInt(partesP[1], 10) || 1;
+        }
+        
+        var sheetItens = ss.getSheetByName('ItensCartao');
+        var itensParsed = [];
+        if (params.itensJson) {
+          try { itensParsed = JSON.parse(params.itensJson); } catch(err) {}
+        }
+        
+        if (!idCompraParam || isNaN(idCompraParam) || idCompraParam === 0) {
+          idCompraParam = obterProximoIdNumerico(sheet);
+        }
+        
+        removerItensPorIdCompra(sheetItens, idCompraParam);
+        
+        var rangeCompleto = sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(7, lastCol));
+        var valores = rangeCompleto.getValues();
+        var linhasParaDeletar = [];
+        
+        for (var i = 0; i < valores.length; i++) {
+          var rId = i + 2;
+          var rCompraId = parseInt(valores[i][0], 10) || 0;
+          if (rCompraId === idCompraParam || rId === rowIndex) {
+            linhasParaDeletar.push(rId);
+          }
+        }
+        
+        linhasParaDeletar.sort(function(a, b) { return b - a; });
+        for (var d = 0; d < linhasParaDeletar.length; d++) {
+          sheet.deleteRow(linhasParaDeletar[d]);
+        }
+        
+        for (var p = 0; p < totalParcelasDesejadas; p++) {
+          var numParcelaAtual = p + 1;
+          var strParcelaFormatada = numParcelaAtual + '/' + totalParcelasDesejadas;
+          
+          var mesCalculado = faturaMesInicial + p;
+          while (mesCalculado > 12) {
+            mesCalculado -= 12;
+          }
+          var strFaturaMes = String(mesCalculado).padStart(2, '0');
+          
+          var rowData = [idCompraParam, dataStr, strFaturaMes, descStr, catStr, "'" + strParcelaFormatada, valNum];
+          sheet.appendRow(rowData);
+          var lastRowIns = sheet.getLastRow();
+          
+          sheet.getRange(lastRowIns, 1).setNumberFormat("0").setValue(idCompraParam);
+          sheet.getRange(lastRowIns, 2).setNumberFormat("@").setValue(dataStr);
+          sheet.getRange(lastRowIns, 3).setNumberFormat("@").setValue(strFaturaMes);
+          sheet.getRange(lastRowIns, 6).setNumberFormat("@").setValue("'" + strParcelaFormatada);
+          sheet.getRange(lastRowIns, 7).setNumberFormat("R$ #,##0.00").setValue(valNum);
+        }
+        
+        if (itensParsed.length > 0) {
+          salvarItensPorIdCompra(sheetItens, idCompraParam, itensParsed);
+        }
+        
+      } else {
+        var rowData = [];
+        if (tipo === 'Rendas') {
+          rowData = [dataStr, valNum, descStr, catStr];
+        } else if (tipo === 'Despesas') {
+          rowData = [dataStr, valNum, descStr, catStr, formaStr];
+        }
+        sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+        sheet.getRange(rowIndex, 1).setNumberFormat("@").setValue(dataStr);
+      }
+      
+      formatarPlanilhas(ss);
+      return respJSON({result: 'success', acao: 'editar'});
+    }
+    
+    if (action === 'deletar') {
+      var tipo = params.tipo;
+      var sheet = ss.getSheetByName(tipo);
+      if (!sheet) return respJSON({result: 'error', message: 'Aba ' + tipo + ' não encontrada'});
+      
+      var rowIndex = parseInt(params.rowIndex);
+      
+      if (tipo === 'CartaoDeCredito') {
+        var lastCol = sheet.getLastColumn();
+        var idCompraParam = 0;
+        if (lastCol >= 7 && rowIndex >= 2) {
+          idCompraParam = parseInt(sheet.getRange(rowIndex, 1).getValue(), 10) || 0;
+        }
+        
+        var sheetItens = ss.getSheetByName('ItensCartao');
+        
+        if (idCompraParam > 0) {
+          removerItensPorIdCompra(sheetItens, idCompraParam);
+          
+          var rangeCompleto = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7);
+          var valores = rangeCompleto.getValues();
+          var linhasParaDeletar = [];
+          
+          for (var i = 0; i < valores.length; i++) {
+            if (parseInt(valores[i][0], 10) === idCompraParam) {
+              linhasParaDeletar.push(i + 2);
+            }
+          }
+          
+          for (var d = linhasParaDeletar.length - 1; d >= 0; d--) {
+            sheet.deleteRow(linhasParaDeletar[d]);
+          }
+        } else {
+          sheet.deleteRow(rowIndex);
+        }
+      } else {
+        sheet.deleteRow(rowIndex);
+      }
+      
+      formatarPlanilhas(ss);
+      return respJSON({result: 'success', acao: 'deletar'});
+    }
+    
+    return respJSON({status: 'API Ativa', paramsRecebidos: params});
+    
+  } catch (err) {
+    return respJSON({result: 'error', error: err.toString()});
+  }
+}
+
+/**
+ * Rotina segura com validação rigorosa de colunas baseada no nome do cabeçalho existente.
+ * Garante que nenhuma coluna seja trocada de lugar cegamente corrompendo os dados.
+ */
+function verificarOuReorganizarAbaCartaoSegura(ss) {
+  var sheet = ss.getSheetByName('CartaoDeCredito');
+  var ordemDesejada = ['ID', 'Data', 'Mês Fatura', 'Estabelecimento', 'Categoria', 'Parcela', 'Valor'];
+
+  if (!sheet) {
+    sheet = ss.insertSheet('CartaoDeCredito');
+    sheet.appendRow(ordemDesejada);
+    return;
+  }
+  
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  
+  if (lastCol < 1 || lastRow < 1) {
+    sheet.clear();
+    sheet.appendRow(ordemDesejada);
+    return;
+  }
+  
+  var cabecalhoAtual = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  
+  // Valida se o cabeçalho já está exatamente na ordem correta
+  var jaEstaCorreto = true;
+  if (cabecalhoAtual.length < 7) {
+    jaEstaCorreto = false;
+  } else {
+    for (var i = 0; i < 7; i++) {
+      var atualLimpo = String(cabecalhoAtual[i] || '').trim().toLowerCase();
+      var desejadoLimpo = ordemDesejada[i].trim().toLowerCase();
+      if (atualLimpo !== desejadoLimpo) {
+        jaEstaCorreto = false;
+        break;
+      }
+    }
+  }
+
+  if (jaEstaCorreto) {
+    return; // Está perfeito, não mexe em nada!
+  }
+
+  // Se não estiver correto, fazemos o mapeamento inteligente linha por linha com base no NOME DA COLUNA
+  var novosDados = [];
+  if (lastRow >= 2) {
+    var dadosAntigos = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    
+    for (var r = 0; r < dadosAntigos.length; r++) {
+      var linha = dadosAntigos[r];
+      var mapaValores = {
+        'id': '',
+        'data': '',
+        'mês fatura': '',
+        'estabelec': '',
+        'categoria': '',
+        'parcela': '',
+        'valor': 0
+      };
+      
+      // Lê cada célula da linha antiga identificando a qual coluna ela pertencia pelo cabeçalho antigo
+      for (var c = 0; c < cabecalhoAtual.length; c++) {
+        var nomeCab = String(cabecalhoAtual[c] || '').trim().toLowerCase();
+        var valCel = linha[c];
+        
+        if (nomeCab === 'id' || nomeCab === 'idCompra') mapaValores['id'] = valCel;
+        else if (nomeCab.includes('data')) mapaValores['data'] = valCel;
+        else if (nomeCab.includes('fatura') || nomeCab.includes('mês')) mapaValores['mês fatura'] = valCel;
+        else if (nomeCab.includes('estabelec') || nomeCab.includes('descri')) mapaValores['estabelec'] = valCel;
+        else if (nomeCab.includes('categoria')) mapaValores['categoria'] = valCel;
+        else if (nomeCab.includes('parcela')) mapaValores['parcela'] = valCel;
+        else if (nomeCab.includes('valor')) mapaValores['valor'] = valCel;
+      }
+      
+      // Monta a linha estritamente na ordem desejada
+      novosDados.push([
+        mapaValores['id'] !== '' ? mapaValores['id'] : (r + 1),
+        mapaValores['data'],
+        mapaValores['mês fatura'],
+        mapaValores['estabelec'],
+        mapaValores['categoria'],
+        mapaValores['parcela'],
+        mapaValores['valor']
+      ]);
+    }
+  }
+
+  // Reescreve a aba com segurança absoluta
+  sheet.clear();
+  sheet.appendRow(ordemDesejada);
+  if (novosDados.length > 0) {
+    sheet.getRange(2, 1, novosDados.length, 7).setValues(novosDados);
+  }
+}
+
+function obterProximoIdNumerico(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 1;
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 7) return 1;
+  
+  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  var maiorId = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var val = parseInt(ids[i][0], 10);
+    if (!isNaN(val) && val > maiorId) {
+      maiorId = val;
+    }
+  }
+  return maiorId + 1;
+}
+
+function converterDataParaTimestamp(dataStr) {
+  if (!dataStr) return 0;
+  if (dataStr instanceof Date) return dataStr.getTime();
+  
+  var partes = String(dataStr).split('/');
+  if (partes.length === 3) {
+    var dia = parseInt(partes[0], 10);
+    var mes = parseInt(partes[1], 10) - 1;
+    var ano = parseInt(partes[2], 10);
+    var d = new Date(ano, mes, dia);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  
+  var dIso = new Date(dataStr);
+  return isNaN(dIso.getTime()) ? 0 : dIso.getTime();
+}
+
+function formatarPlanilhas(ss) {
+  var nomesAbas = ['Rendas', 'Despesas', 'CartaoDeCredito', 'ItensCartao'];
+  
+  for (var k = 0; k < nomesAbas.length; k++) {
+    var sheet = ss.getSheetByName(nomesAbas[k]);
+    if (!sheet) continue;
+    
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < 1 || lastCol < 1) continue;
+    
+    for (var c = 1; c <= lastCol; c++) {
+      if (c !== 1 || nomesAbas[k] !== 'CartaoDeCredito') sheet.autoResizeColumn(c);
+    }
+    
+    var headerRange = sheet.getRange(1, 1, 1, lastCol);
+    headerRange.setFontWeight("bold");
+    headerRange.setHorizontalAlignment("center");
+    
+    if (nomesAbas[k] === 'CartaoDeCredito') {
+      sheet.getRange(1, 1).setValue('ID');
+    }
+    
+    if (lastRow > 1) {
+      if (nomesAbas[k] === 'Rendas') {
+        sheet.getRange(2, 1, lastRow - 1, 1).setHorizontalAlignment("center");
+        sheet.getRange(2, 2, lastRow - 1, 1).setNumberFormat("R$ #,##0.00").setHorizontalAlignment("right");
+      } else if (nomesAbas[k] === 'Despesas') {
+        sheet.getRange(2, 1, lastRow - 1, 1).setHorizontalAlignment("center");
+        sheet.getRange(2, 2, lastRow - 1, 1).setNumberFormat("R$ #,##0.00").setHorizontalAlignment("right");
+      } else if (nomesAbas[k] === 'CartaoDeCredito') {
+        // ID, Data, Mês Fatura, Estabelecimento, Categoria, Parcela, Valor
+        sheet.getRange(2, 1, lastRow - 1, 1).setHorizontalAlignment("center").setNumberFormat("0");
+        sheet.getRange(2, 2, lastRow - 1, 1).setHorizontalAlignment("center");
+        sheet.getRange(2, 3, lastRow - 1, 1).setHorizontalAlignment("center");
+        sheet.getRange(2, 6, lastRow - 1, 1).setHorizontalAlignment("center");
+        sheet.getRange(2, 7, lastRow - 1, 1).setNumberFormat("R$ #,##0.00").setHorizontalAlignment("right");
+      } else if (nomesAbas[k] === 'ItensCartao') {
+        sheet.getRange(2, 1, lastRow - 1, 1).setHorizontalAlignment("center");
+        if (lastCol >= 4) {
+          sheet.getRange(2, 2, lastRow - 1, 1).setHorizontalAlignment("center");
+          sheet.getRange(2, 4, lastRow - 1, 1).setNumberFormat("R$ #,##0.00").setHorizontalAlignment("right");
+        } else {
+          sheet.getRange(2, 3, lastRow - 1, 1).setNumberFormat("R$ #,##0.00").setHorizontalAlignment("right");
+        }
+      }
+    }
+  }
+}
+
+function verificarOuCriarAbaItens(ss) {
+  var sheet = ss.getSheetByName('ItensCartao');
+  if (!sheet) {
+    sheet = ss.insertSheet('ItensCartao');
+    sheet.appendRow(['id', 'TipoSub', 'DescricaoItem', 'ValorItem']);
+  } else {
+    var lastRow = sheet.getLastRow();
+    if (lastRow === 0) {
+      sheet.appendRow(['id', 'TipoSub', 'DescricaoItem', 'ValorItem']);
+    } else {
+      var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (header[0] !== 'id') {
+        sheet.getRange(1, 1).setValue('id');
+      }
+      if (header.length === 3 && header[1] !== 'TipoSub') {
+        sheet.insertColumnBefore(2);
+        sheet.getRange(1, 2).setValue('TipoSub');
+      }
+    }
+  }
+}
+
+function salvarItensPorIdCompra(sheetItens, idCompraNum, itens) {
+  if (!sheetItens || !itens || !itens.length) return;
+  var numCols = sheetItens.getLastColumn();
+  
+  for (var i = 0; i < itens.length; i++) {
+    if (numCols >= 4) {
+      sheetItens.appendRow([
+        idCompraNum,
+        itens[i].tipoSub || 'debito',
+        itens[i].descricao,
+        parseFloat(itens[i].valor || 0)
+      ]);
+    } else {
+      sheetItens.appendRow([
+        idCompraNum,
+        itens[i].descricao,
+        parseFloat(itens[i].valor || 0)
+      ]);
+    }
+  }
+  var lastR = sheetItens.getLastRow();
+  sheetItens.getRange(2, 1, lastR - 1, 1).setNumberFormat("0");
+}
+
+function removerItensPorIdCompra(sheetItens, idCompraNum) {
+  if (!sheetItens) return;
+  var lastRow = sheetItens.getLastRow();
+  if (lastRow < 2) return;
+  
+  var range = sheetItens.getRange(2, 1, lastRow - 1, 1);
+  var values = range.getValues();
+  
+  for (var i = values.length - 1; i >= 0; i--) {
+    if (parseInt(values[i][0], 10) === parseInt(idCompraNum, 10)) {
+      sheetItens.deleteRow(i + 2);
+    }
+  }
+}
+
+function lerAbaItens(sheetItens) {
+  if (!sheetItens) return [];
+  var lastRow = sheetItens.getLastRow();
+  if (lastRow < 2) return [];
+  
+  var numCols = sheetItens.getLastColumn();
+  var rows = sheetItens.getRange(2, 1, lastRow - 1, numCols).getValues();
+  var itens = [];
+  
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (r[0] !== "") {
+      if (numCols >= 4) {
+        itens.push({
+          rowItem: i + 2,
+          idCompra: parseInt(r[0], 10) || 0,
+          tipoSub: r[1] || 'debito',
+          descricao: r[2],
+          valor: parseFloat(r[3] || 0)
+        });
+      } else {
+        itens.push({
+          rowItem: i + 2,
+          idCompra: parseInt(r[0], 10) || 0,
+          tipoSub: 'debito',
+          descricao: r[1],
+          valor: parseFloat(r[2] || 0)
+        });
+      }
+    }
+  }
+  return itens;
+}
+
+function lerAba(sheet, tipo) {
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  
+  var rows = sheet.getRange(2, 1, lastRow - 1, tipo === 'Despesas' ? 5 : 4).getValues();
+  var dados = [];
+  
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (r[0] !== "") {
+      var dataBruta = r[0];
+      var dataFormatada = "";
+      
+      if (dataBruta instanceof Date) {
+        var dia = String(dataBruta.getDate()).padStart(2, '0');
+        var mes = String(dataBruta.getMonth() + 1).padStart(2, '0');
+        var ano = dataBruta.getFullYear();
+        dataFormatada = dia + '/' + mes + '/' + ano;
+      } else {
+        var str = String(dataBruta).trim();
+        if (str.indexOf('GMT') !== -1 || str.indexOf('Wed') !== -1 || str.indexOf('Thu') !== -1 || str.indexOf('Fri') !== -1 || str.indexOf('Sat') !== -1 || str.indexOf('Sun') !== -1 || str.indexOf('Mon') !== -1 || str.indexOf('Tue') !== -1) {
+          var dObj = new Date(str);
+          if (!isNaN(dObj.getTime())) {
+            var dia = String(dObj.getDate()).padStart(2, '0');
+            var mes = String(dObj.getMonth() + 1).padStart(2, '0');
+            var ano = dObj.getFullYear();
+            dataFormatada = dia + '/' + mes + '/' + ano;
+          } else {
+            dataFormatada = str.substring(0, 10);
+          }
+        } else {
+          dataFormatada = str.substring(0, 10);
+        }
+      }
+
+      var item = {
+        rowIndex: i + 2,
+        tipo: tipo,
+        data: dataFormatada,
+        valor: parseFloat(r[1] || 0)
+      };
+
+      if (tipo === 'Rendas') {
+        item.descricao = r[2];
+        item.categoria = r[3];
+        item.forma = '';
+        item.faturaMes = '';
+        item.parcela = '1/1';
+      } else if (tipo === 'Despesas') {
+        item.descricao = r[2];
+        item.categoria = r[3];
+        item.forma = r[4];
+        item.faturaMes = '';
+        item.parcela = '1/1';
+      }
+
+      dados.push(item);
+    }
+  }
+  return dados;
+}
+
+function lerAbaCartao(sheet) {
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  
+  var lastCol = sheet.getLastColumn();
+  var range = sheet.getRange(2, 1, lastRow - 1, Math.max(7, lastCol));
+  var rows = range.getValues();
+  var dados = [];
+  var novasParcelas = [];
+  var idsParaAtualizar = [];
+
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (r[1] !== "") {
+      var dataBruta = r[1];
+      var dataFormatada = "";
+      
+      if (dataBruta instanceof Date) {
+        var dia = String(dataBruta.getDate()).padStart(2, '0');
+        var mes = String(dataBruta.getMonth() + 1).padStart(2, '0');
+        var ano = dataBruta.getFullYear();
+        dataFormatada = dia + '/' + mes + '/' + ano;
+      } else {
+        var str = String(dataBruta).trim();
+        if (str.indexOf('GMT') !== -1 || str.indexOf('Wed') !== -1 || str.indexOf('Thu') !== -1 || str.indexOf('Fri') !== -1 || str.indexOf('Sat') !== -1 || str.indexOf('Sun') !== -1 || str.indexOf('Mon') !== -1 || str.indexOf('Tue') !== -1) {
+          var dObj = new Date(str);
+          if (!isNaN(dObj.getTime())) {
+            var dia = String(dObj.getDate()).padStart(2, '0');
+            var mes = String(dObj.getMonth() + 1).padStart(2, '0');
+            var ano = dObj.getFullYear();
+            dataFormatada = dia + '/' + mes + '/' + ano;
+          } else {
+            dataFormatada = str.substring(0, 10);
+          }
+        } else {
+          dataFormatada = str.substring(0, 10);
+        }
+      }
+
+      var parcelaFinal = '1/1';
+      var valParcela = r[5]; // Parcela (índice 5)
+
+      if (valParcela instanceof Date) {
+        var pDia = valParcela.getDate();
+        var pMes = valParcela.getMonth() + 1;
+        parcelaFinal = pDia + '/' + pMes;
+      } else {
+        var strP = String(valParcela || '1/1').trim();
+        if (strP.indexOf('GMT') !== -1 || strP.indexOf('Wed') !== -1 || strP.indexOf('Thu') !== -1 || strP.indexOf('Fri') !== -1 || strP.indexOf('Sat') !== -1 || strP.indexOf('Sun') !== -1 || strP.indexOf('Mon') !== -1 || strP.indexOf('Tue') !== -1) {
+          var dP = new Date(strP);
+          if (!isNaN(dP.getTime())) {
+            parcelaFinal = dP.getDate() + '/' + (dP.getMonth() + 1);
+          } else {
+            parcelaFinal = '1/1';
+          }
+        } else {
+          parcelaFinal = strP.replace(/^'/, '');
+        }
+      }
+
+      novasParcelas.push(["'" + parcelaFinal]);
+
+      var idAtual = parseInt(r[0], 10);
+      if (isNaN(idAtual) || idAtual <= 0) {
+        idAtual = i + 1;
+        idsParaAtualizar.push({row: i + 2, id: idAtual});
+      }
+
+      dados.push({
+        rowIndex: i + 2,
+        tipo: 'CartaoDeCredito',
+        idCompra: idAtual,
+        data: dataFormatada,
+        faturaMes: String(r[2] || '').padStart(2, '0'),
+        descricao: r[3],
+        categoria: r[4],
+        parcela: parcelaFinal,
+        valor: parseFloat(r[6] || 0),
+        forma: ''
+      });
+    } else {
+      novasParcelas.push([""]);
+    }
+  }
+
+  if (novasParcelas.length > 0) {
+    var colunaF = sheet.getRange(2, 6, novasParcelas.length, 1);
+    colunaF.setNumberFormat("@");
+    colunaF.setValues(novasParcelas);
+  }
+
+  for (var j = 0; j < idsParaAtualizar.length; j++) {
+    sheet.getRange(idsParaAtualizar[j].row, 1).setNumberFormat("0").setValue(idsParaAtualizar[j].id);
+  }
+
+  return dados;
+}
+
+function respJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+             .setMimeType(ContentService.MimeType.JSON);
+}
