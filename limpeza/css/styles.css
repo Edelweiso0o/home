@@ -1,5 +1,5 @@
-/* Fontes externas e configurações gerais */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+/* Fontes e Estilização Exclusiva do QG Limpeza em tons de Violeta */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Fira+Code:wght@400;500;600;700&display=swap');
 
 body { 
     font-family: 'Inter', sans-serif; 
@@ -9,23 +9,33 @@ body {
     font-family: 'Fira Code', monospace;
 }
 
-/* Variáveis de Cores Temáticas */
-:root {
-    --bg-dark: #0b0f17;
-    --card-dark: #151c28;
-    --border-dark: #1f293d;
-    --accent-indigo: #6366f1;
+/* Custom Scrollbar Violeta */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0f0b1e;
+}
+::-webkit-scrollbar-thumb {
+    background: #231a42;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #a855f7;
 }
 
-/* Utility classes para o tema escuro */
-.bg-dark-bg {
-    background-color: var(--bg-dark);
+/* Animação para Missões Críticas e Urgentes */
+@keyframes pulse-urgency-purple {
+    0%, 100% { 
+        border-color: rgba(245, 158, 11, 0.4); 
+    }
+    50% { 
+        border-color: rgba(239, 68, 68, 0.9); 
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.25); 
+    }
 }
 
-.bg-dark-card {
-    background-color: var(--card-dark);
-}
-
-.border-dark-border {
-    border-color: var(--border-dark);
+.card-urgent {
+    animation: pulse-urgency-purple 2s infinite ease-in-out;
 }
