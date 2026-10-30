@@ -22,8 +22,13 @@
 </head>
 <body class="bg-[#0f0b1e] text-slate-100 min-h-screen flex flex-col justify-between selection:bg-purple-500 selection:text-slate-900">
 
+    <!-- Indicador Global de Carregamento -->
+    <div id="globalLoader" class="fixed top-4 right-4 z-[9999] hidden text-purple-400">
+        <i class="fa-solid fa-spinner animate-spin text-xl"></i>
+    </div>
+
     <!-- Navbar / Cabeçalho -->
-    <header class="border-b border-purple-900/50 bg-[#17112d]/90 backdrop-blur-md sticky top-0 z-50">
+    <header class="border-b border-purple-900/50 bg-[#17112d]/90 backdrop-blur-md sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-3">
                 <a href="../index.html" class="w-10 h-10 rounded-xl bg-[#231a42] border border-purple-800/60 hover:border-purple-500 flex items-center justify-center text-purple-300 hover:text-white transition" title="Voltar ao Painel Principal">
@@ -58,6 +63,11 @@
                         <span id="btnPontoLabel">Bater Ponto</span>
                     </button>
                 </div>
+
+                <!-- Botão do Modal de Configurações e Limpeza -->
+                <button onclick="abrirModalConfig()" class="w-10 h-10 rounded-xl bg-[#231a42] border border-purple-800/60 hover:border-purple-500 flex items-center justify-center text-purple-300 hover:text-white transition" title="Configurações e Limpeza">
+                    <i class="fa-solid fa-gear text-base"></i>
+                </button>
             </div>
         </div>
     </header>
@@ -113,17 +123,8 @@
 
         </div>
 
-        <div id="pontoWarningBanner" class="hidden bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl flex items-center justify-between text-amber-300 text-xs">
-            <div class="flex items-center space-x-3">
-                <i class="fa-solid fa-triangle-exclamation text-base"></i>
-                <span>Você está de <strong>FOLGA</strong>. Bata o ponto no topo para registrar o tempo trabalhado nas missões e liberar relatórios.</span>
-            </div>
-            <button onclick="alternarPonto()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg text-[11px] font-mono-code">
-                Bater Ponto Agora
-            </button>
-        </div>
-
-        <div id="customModal" class="fixed inset-0 bg-[#090614]/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <!-- Modal Customizado Genérico (Z-Index Superior) -->
+        <div id="customModal" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-[70] hidden flex items-center justify-center p-4">
             <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
                 <div class="flex items-center space-x-3 text-amber-400">
                     <i class="fa-solid fa-circle-exclamation text-2xl"></i>
@@ -133,6 +134,66 @@
                 <div class="flex justify-end">
                     <button onclick="fecharModal()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition font-mono-code">
                         Entendido
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Configuração e Gestão de Dados (Cobertura Total da Tela com W-Screen e H-Screen) -->
+        <div id="modalConfig" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] flex flex-col relative my-auto">
+                
+                <!-- Sincronismo Spinner no topo do painel -->
+                <div id="modalSyncLoader" class="absolute top-4 right-12 hidden text-purple-400">
+                    <i class="fa-solid fa-spinner animate-spin text-sm"></i>
+                </div>
+
+                <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
+                    <div class="flex items-center space-x-2 text-purple-400">
+                        <i class="fa-solid fa-sliders text-xl"></i>
+                        <h3 class="text-base font-bold text-white">Gerenciamento e Limpeza Seletiva</h3>
+                    </div>
+                    <button onclick="fecharModalConfig()" class="text-purple-300/50 hover:text-white transition">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Abas de Seleção dentro do Modal -->
+                <div class="flex space-x-2 border-b border-purple-900/50 pb-2">
+                    <button onclick="mudarAbaConfig('missoes')" id="tabBtnMissoes" class="px-3 py-1.5 rounded-lg text-xs font-mono-code bg-purple-600 text-white transition">
+                        Fila de Missões
+                    </button>
+                    <button onclick="mudarAbaConfig('turnos')" id="tabBtnTurnos" class="px-3 py-1.5 rounded-lg text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 transition">
+                        Histórico de Turnos
+                    </button>
+                </div>
+
+                <!-- Conteúdo da Aba: Missões -->
+                <div id="configContentMissoes" class="space-y-3 flex-grow overflow-y-auto max-h-[50vh] pr-1">
+                    <div class="flex justify-between items-center text-xs text-purple-300/70 px-1">
+                        <span>Selecione os itens que deseja descartar:</span>
+                    </div>
+                    <div id="listaSelecaoMissoes" class="space-y-2">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+
+                <!-- Conteúdo da Aba: Turnos -->
+                <div id="configContentTurnos" class="space-y-3 flex-grow overflow-y-auto max-h-[50vh] pr-1 hidden">
+                    <div class="flex justify-between items-center text-xs text-purple-300/70 px-1">
+                        <span>Selecione os turnos que deseja descartar:</span>
+                    </div>
+                    <div id="listaSelecaoTurnos" class="space-y-2">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-2 border-t border-purple-900/50">
+                    <button onclick="executarLimpezaTudo()" class="bg-red-950/30 hover:bg-red-900/40 text-red-400 border border-red-900/60 text-xs px-3 py-2 rounded-xl transition font-mono-code">
+                        Reset Total da Planilha
+                    </button>
+                    <button onclick="executarExclusaoSelecionadaAtiva()" class="bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs px-4 py-2 rounded-xl transition font-mono-code">
+                        Excluir Selecionados
                     </button>
                 </div>
             </div>
