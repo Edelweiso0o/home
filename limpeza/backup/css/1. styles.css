@@ -1,0 +1,60 @@
+/* Fontes e Estilização Exclusiva em tons de Violeta */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Fira+Code:wght@400;500;600;700&display=swap');
+
+body { 
+    font-family: 'Inter', sans-serif; 
+}
+
+.font-mono-code {
+    font-family: 'Fira Code', monospace;
+}
+
+/* Custom Scrollbar Violeta */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0f0b1e;
+}
+::-webkit-scrollbar-thumb {
+    background: #231a42;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #a855f7;
+}
+
+/* Animação para Missões Críticas e Urgentes */
+@keyframes pulse-urgency-purple {
+    0%, 100% { 
+        border-color: rgba(245, 158, 11, 0.4); 
+    }
+    50% { 
+        border-color: rgba(239, 68, 68, 0.9); 
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.25); 
+    }
+}
+
+.card-urgent {
+    animation: pulse-urgency-purple 2s infinite ease-in-out;
+}
+
+/* Estilo GTA RP Toast Animation */
+@keyframes toast-slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-slide-out {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+.toast-gta {
+    animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast-gta.hiding {
+    animation: toast-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
