@@ -92,7 +92,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// 1. ROTINA DE ALINHAMENTO JÁ TESTADA (Centralizado, Título à esquerda, Cabeçalho estilizado)
+// 1. ROTINA DE ALINHAMENTO JÁ APROVADA
 async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -186,7 +186,7 @@ async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
   }
 }
 
-// 2. ROTINA SEPARADA EM TESTES: Aplica as bordas (Externa média e Interna fina laranja) no Progresso Diário
+// 2. ROTINA DE TESTE DE BORDAS COM OS ENUMS CORRETOS (MEDIUM e THIN)
 async function testarBordasTabela(sheets, spreadsheetId) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -221,8 +221,8 @@ async function testarBordasTabela(sheets, spreadsheetId) {
           bottom: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
           left: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
           right: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          innerHorizontal: { style: "STYLE_THIN", color: { red: 1, green: 0.5, blue: 0 } },
-          innerVertical: { style: "STYLE_THIN", color: { red: 1, green: 0.5, blue: 0 } }
+          innerHorizontal: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } },
+          innerVertical: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } }
         }
       }
     ];
@@ -305,7 +305,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      // Condição: Alinhamento ao criar missões no progresso diário
       await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
@@ -335,8 +334,6 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
-      
-      // Dispara a rotina de teste de bordas a cada reload (GET)
       await testarBordasTabela(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
@@ -465,7 +462,6 @@ export default async function handler(req, res) {
           }
         }
 
-        // Condição: Alinhamento aplicado na entrada/saída do ponto
         await formatarAlinhamentoTabela(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
@@ -501,7 +497,6 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        // Condição: Alinhamento ao adicionar nova missão no progresso diário
         await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
@@ -549,7 +544,6 @@ export default async function handler(req, res) {
           }
         }
 
-        // Condição: Alinhamento ao iniciar ou concluir missão
         await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
