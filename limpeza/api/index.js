@@ -128,7 +128,7 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
   let mColMap = {};
   mHeader.forEach((h, i) => { if(h) mColMap[h.trim()] = i; });
 
-  const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+  const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
   const pRows = progRes.data.values || [];
   const pHeader = pRows[1] || [];
   const pData = pRows.slice(2);
@@ -289,9 +289,16 @@ export default async function handler(req, res) {
             const t = dadosPonto[i];
             const st = (t["Status do Turno"] || "").toUpperCase();
             const hs = t["Hora Saída"] || "";
-            if (t.data === hojeStr && (st === "EM SERVIÇO" || !hs)) {
+            if ((t.data === hojeStr || !t.data) && (st === "EM SERVIÇO" || !hs)) {
               linhaTurno = t._linha;
               break;
+            }
+          }
+          // Fallback se não achar pela data exata de hoje, pega o último em aberto independentemente da data
+          if (linhaTurno === -1 && dadosPonto.length > 0) {
+            const ultimo = dadosPonto[dadosPonto.length - 1];
+            if (!ultimo["Hora Saída"] || (ultimo["Status do Turno"] || "").toUpperCase() === "EM SERVIÇO") {
+              linhaTurno = ultimo._linha;
             }
           }
 
@@ -393,8 +400,14 @@ export default async function handler(req, res) {
         let colMap = {};
         header.forEach((h, i) => { if(h) colMap[h.trim()] = i; });
 
-        const missaoAlvo = dados.find(m => String(m.id) === String(data.id) && m.data === hojeStr) ||
+        // Busca flexível por ID (independente de bater exatamente a string da data se houver leve defasagem)
+        let missaoAlvo = dados.find(m => String(m.id) === String(data.id) && m.data === hojeStr) ||
                            dados.find(m => String(m.id) === String(data.id));
+
+        // Se ainda não achou, tenta achar pela última linha com o mesmo Título caso o ID local difira do ID remoto
+        if (!missaoAlvo && data.titulo) {
+          missaoAlvo = dados.slice().reverse().find(m => m.titulo.toLowerCase() === String(data.titulo).toLowerCase());
+        }
 
         if (missaoAlvo) {
           const linha = missaoAlvo._linha;
