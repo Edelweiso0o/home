@@ -333,20 +333,36 @@ function mudarVisaoPrincipal(visao) {
     const btnHist = document.getElementById('btnVisaoHistorico');
     const secFila = document.getElementById('secaoFilaMissoes');
     const secHist = document.getElementById('secaoHistoricoGeral');
+    const boxFiltrosFila = document.getElementById('filtrosFilaContainer');
+    const boxFiltrosHist = document.getElementById('filtrosHistoricoHeaderContainer');
 
     if (visao === 'fila') {
         btnFila.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md';
         btnHist.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition';
         secFila.classList.remove('hidden');
         secHist.classList.add('hidden');
+        if(boxFiltrosFila) boxFiltrosFila.classList.remove('hidden');
+        if(boxFiltrosHist) boxFiltrosHist.classList.add('hidden');
         renderizarMissoes();
     } else {
         btnHist.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md';
         btnFila.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition';
         secHist.classList.remove('hidden');
         secFila.classList.add('hidden');
+        if(boxFiltrosFila) boxFiltrosFila.classList.add('hidden');
+        if(boxFiltrosHist) boxFiltrosHist.classList.remove('hidden');
         renderizarHistoricoGeral();
     }
+}
+
+function abrirModalNovaMissao() {
+    const modal = document.getElementById('modalNovaMissao');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function fecharModalNovaMissao() {
+    const modal = document.getElementById('modalNovaMissao');
+    if (modal) modal.classList.add('hidden');
 }
 
 async function cadastrarMissao(event) {
@@ -385,6 +401,7 @@ async function cadastrarMissao(event) {
 
     document.getElementById('formNovaMissao').reset();
     if (missaoUnicaEl) missaoUnicaEl.checked = false;
+    fecharModalNovaMissao();
     carregarUltimasPreferenciasSelects();
     mostrarNotificacao("Sucesso", "Missão adicionada à fila.", "sucesso", 2000);
 
@@ -663,9 +680,14 @@ function renderizarMissoes() {
 
     const hojeStr = obterDataHojeStr();
 
+    const fComodo = document.getElementById('filtroFilaComodo') ? document.getElementById('filtroFilaComodo').value : 'TODOS';
+    const fPrioridade = document.getElementById('filtroFilaPrioridade') ? document.getElementById('filtroFilaPrioridade').value : 'TODOS';
+
     const missoesAtivas = missoes.filter(m => {
         if (m.data && m.data !== hojeStr) return false;
         if (m.status === 'Concluído' || m.status === 'Cancelado') return false;
+        if (fComodo !== 'TODOS' && m.comodo !== fComodo) return false;
+        if (fPrioridade !== 'TODOS' && m.prioridade !== fPrioridade) return false;
         return true;
     });
 
@@ -681,8 +703,7 @@ function renderizarMissoes() {
         container.innerHTML = `
             <div class="bg-[#17112d] border border-purple-900/50 p-8 rounded-2xl text-center space-y-2">
                 <i class="fa-solid fa-check-double text-2xl text-purple-400/50"></i>
-                <p class="text-xs text-purple-200/70 font-mono-code">Nenhuma missão pendente na fila para hoje.</p>
-                <p class="text-[11px] text-purple-300/40">Parabéns! Todas as tarefas diárias foram cumpridas.</p>
+                <p class="text-xs text-purple-200/70 font-mono-code">Nenhuma missão encontrada na fila com esses filtros.</p>
             </div>
         `;
         return;
@@ -767,12 +788,18 @@ function renderizarHistoricoGeral() {
 
     const fComodo = document.getElementById('filtroHistoricoComodo').value;
     const fStatus = document.getElementById('filtroHistoricoStatus').value;
-    const fData = document.getElementById('filtroHistoricoData').value.trim();
+    const inputDataVal = document.getElementById('filtroHistoricoData').value; 
+
+    let fDataFormatted = '';
+    if (inputDataVal) {
+        const [ano, mes, dia] = inputDataVal.split('-');
+        fDataFormatted = `${dia}/${mes}/${ano}`;
+    }
 
     let filtradas = missoes.filter(m => {
         if (fComodo !== 'TODOS' && m.comodo !== fComodo) return false;
         if (fStatus !== 'TODOS' && (m.status || 'Pendente') !== fStatus) return false;
-        if (fData !== '' && !(m.data || '').includes(fData)) return false;
+        if (fDataFormatted !== '' && !(m.data || '').includes(fDataFormatted)) return false;
         return true;
     });
 
@@ -809,6 +836,14 @@ function renderizarHistoricoGeral() {
             </div>
         `;
     }).join('');
+}
+
+function limparFiltroData() {
+    const el = document.getElementById('filtroHistoricoData');
+    if (el) {
+        el.value = '';
+        renderizarHistoricoGeral();
+    }
 }
 
 function abrirDetalhesComodo(comodo, statusFiltro = 'Concluído') {
@@ -878,7 +913,7 @@ function atualizarEstatisticasGerais() {
                 let tempoEst = parseFloat(m.tempoEstimado) || 0;
                 let tempoReal = m.tempoRealMin || tempoEst;
                 let ganho = tempoEst - tempoReal;
-                if (ganho > 0) creditosEconomizadosMin += ganox; // Corrigido abaixo em tempo real
+                if (ganho > 0) creditosEconomizadosMin += ganho;
 
             } else if (m.status !== 'Cancelado') {
                 pendentesTotal++;
