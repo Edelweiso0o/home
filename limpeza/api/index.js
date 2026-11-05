@@ -92,41 +92,95 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// FUNÇÃO DE TESTE ISOLADA: Pinta estritamente a célula A1 da aba Progresso Diário de Vermelho
-async function testarPintarA1Vermelho(sheets, spreadsheetId) {
+// FORMATAÇÃO COMPLETA: Centralizado, Título à esquerda e Borda Laranja
+async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
     if (!sheetObj) return;
     const sheetId = sheetObj.properties.sheetId;
 
-    const requests = [
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const rows = resVals.data.values || [];
+    if (rows.length === 0) return;
+
+    const { headerRowIndex, colMap } = parseSheetRows(rows);
+    const validColIndexes = Object.values(colMap);
+    if (validColIndexes.length === 0 || headerRowIndex === -1) return;
+
+    const startRowIndex = headerRowIndex; 
+    const endRowIndex = rows.length; 
+    const startColumnIndex = Math.min(...validColIndexes);
+    const endColumnIndex = Math.max(...validColIndexes) + 1;
+
+    let requests = [
+      // 1. Configuração padrão: Fonte Roboto e centralizado para todas as células de dados
       {
         repeatCell: {
-          range: {
-            sheetId: sheetId,
-            startRowIndex: 0,
-            endRowIndex: 1,
-            startColumnIndex: 0,
-            endColumnIndex: 1
-          },
+          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
           cell: {
             userEnteredFormat: {
-              backgroundColor: { red: 1, green: 0, blue: 0 }
+              textFormat: { fontFamily: "Roboto", fontSize: 10 },
+              horizontalAlignment: "CENTER",
+              verticalAlignment: "MIDDLE"
             }
           },
-          fields: "userEnteredFormat.backgroundColor"
+          fields: "userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
         }
       }
     ];
+
+    // 2. Se houver coluna de Título da Missão, alinha especificamente à esquerda
+    const tituloColIdx = colMap["Título da Missão"];
+    if (tituloColIdx !== undefined) {
+      requests.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex: tituloColIdx, endColumnIndex: tituloColIdx + 1 },
+          cell: {
+            userEnteredFormat: {
+              horizontalAlignment: "LEFT"
+            }
+          },
+          fields: "userEnteredFormat.horizontalAlignment"
+        }
+      });
+    }
+
+    // 3. Formatação do Cabeçalho (Fundo Escuro, Texto Branco, Centralizado)
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
+            textFormat: { fontFamily: "Roboto", fontSize: 10, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+            horizontalAlignment: "CENTER",
+            verticalAlignment: "MIDDLE"
+          }
+        },
+        fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
+      }
+    });
+
+    // 4. Bordas: Externa sólida preta e interna fina na cor LARANJA
+    requests.push({
+      updateBorders: {
+        range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
+        top: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        bottom: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        left: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        right: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        innerHorizontal: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } },
+        innerVertical: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } }
+      }
+    });
 
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: { requests }
     });
-    console.log("Célula A1 pintada de vermelho com sucesso!");
   } catch (e) {
-    console.error("Erro ao pintar célula A1:", e);
+    console.error("Erro ao aplicar formatação visual:", e);
   }
 }
 
@@ -199,6 +253,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
+      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -227,9 +282,6 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
-      
-      // Executa o teste de pintar A1 de vermelho a cada GET para tirar a prova real
-      await testarPintarA1Vermelho(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -273,11 +325,6 @@ export default async function handler(req, res) {
       const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const acao = data.acao;
       const hojeStr = getDataHojeStr();
-
-      if (acao === 'testarVermelho') {
-        await testarPintarA1Vermelho(sheets, spreadsheetId);
-        return res.status(200).json({ status: "success", message: "A1 pintada de vermelho!" });
-      }
 
       if (acao === 'baterPonto') {
         const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A1:Z500" });
@@ -362,6 +409,7 @@ export default async function handler(req, res) {
           }
         }
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -396,6 +444,7 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -442,6 +491,7 @@ export default async function handler(req, res) {
           }
         }
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
