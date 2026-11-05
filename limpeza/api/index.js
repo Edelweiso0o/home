@@ -92,6 +92,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
+// Rotina de formatação completa (roda assincronamente em background)
 async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -291,7 +292,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
+      // Executa formatação em background
+      formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -319,7 +321,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
+      // Dispara em background para responder instantaneamente ao navegador
+      sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId).catch(err => console.error(err));
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -447,7 +450,7 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaCompleta(sheets, spreadsheetId, "Registro de Ponto");
+        formatarTabelaCompleta(sheets, spreadsheetId, "Registro de Ponto").catch(err => console.error(err));
         return res.status(200).json({ status: "success" });
       }
 
@@ -483,8 +486,8 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
-        await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
+        formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
+        formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -517,15 +520,9 @@ export default async function handler(req, res) {
               dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
             }
 
-            // Cálculo do Crédito: (Término - Início) - Tempo Estimado
-            // Onde o tempo economizado / ganho reflete o crédito.
             if (colMap["Crédito"] !== undefined) {
               const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || missaoAlvo.tempoEstimado) || 0;
               const tempoRealMin = data.tempoRealMin !== undefined ? data.tempoRealMin : tempoEstMin;
-              
-              // Se levamos tempoRealMin para concluir e o estimado era tempoEstMin,
-              // o ganho em segundos ou minutos: (tempoEstMin * 60) - (tempoRealMin * 60)
-              // Conforme a regra: (término - início) em segundos menos o tempo estimado em segundos.
               const diffSegs = (tempoEstMin * 60) - (tempoRealMin * 60);
 
               let creditoFormatado = "";
@@ -558,7 +555,7 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
+        formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
         return res.status(200).json({ status: "success" });
       }
 
