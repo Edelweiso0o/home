@@ -92,8 +92,8 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// 1. ROTINA DE ALINHAMENTO JÁ APROVADA
-async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
+// ROTINA OFICIAL DE FORMATAÇÃO (Alinhamentos, Cabeçalho e Bordas Definitivas - Cabeçalho com borda preta)
+async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
@@ -114,6 +114,7 @@ async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
+      // 1. Centraliza os dados da tabela
       {
         repeatCell: {
           range: {
@@ -135,6 +136,7 @@ async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
       }
     ];
 
+    // 2. Alinha a coluna "Título da Missão" à Esquerda
     const tituloColIdx = colMap["Título da Missão"];
     if (tituloColIdx !== undefined) {
       requests.push({
@@ -156,6 +158,7 @@ async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
       });
     }
 
+    // 3. Formata o Cabeçalho
     requests.push({
       repeatCell: {
         range: {
@@ -177,62 +180,50 @@ async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests }
-    });
-  } catch (e) {
-    console.error(`Erro ao alinhar tabela ${sheetName}:`, e);
-  }
-}
-
-// 2. ROTINA DE TESTE DE BORDAS COM OS ENUMS CORRETOS (MEDIUM e THIN)
-async function testarBordasTabela(sheets, spreadsheetId) {
-  try {
-    const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
-    if (!sheetObj) return;
-    const sheetId = sheetObj.properties.sheetId;
-
-    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
-    const rows = resVals.data.values || [];
-    if (rows.length === 0) return;
-
-    const { headerRowIndex, colMap } = parseSheetRows(rows);
-    const validColIndexes = Object.values(colMap);
-    if (validColIndexes.length === 0 || headerRowIndex === -1) return;
-
-    const startRowIndex = headerRowIndex; 
-    const endRowIndex = rows.length; 
-    const startColumnIndex = Math.min(...validColIndexes);
-    const endColumnIndex = Math.max(...validColIndexes) + 1;
-
-    const requests = [
-      {
-        updateBorders: {
-          range: {
-            sheetId,
-            startRowIndex,
-            endRowIndex,
-            startColumnIndex,
-            endColumnIndex
-          },
-          top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
-          innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
-        }
+    // 4. Borda externa média preta e grade interna laranjada
+    requests.push({
+      updateBorders: {
+        range: {
+          sheetId,
+          startRowIndex,
+          endRowIndex,
+          startColumnIndex,
+          endColumnIndex
+        },
+        top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+        innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
       }
-    ];
+    });
+
+    // 5. Isola o cabeçalho com bordas pretas para evitar a grade laranja nele
+    requests.push({
+      updateBorders: {
+        range: {
+          sheetId,
+          startRowIndex,
+          endRowIndex: startRowIndex + 1,
+          startColumnIndex,
+          endColumnIndex
+        },
+        top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+        innerHorizontal: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        innerVertical:   { style: "SOLID", color: { red: 0, green: 0, blue: 0 } }
+      }
+    });
 
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: { requests }
     });
   } catch (e) {
-    console.error("Erro ao testar bordas:", e);
+    console.error(`Erro ao formatar tabela ${sheetName}:`, e);
   }
 }
 
@@ -305,7 +296,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
+      // Aplicada na criação das missões
+      await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -334,7 +326,6 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
-      await testarBordasTabela(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -462,7 +453,8 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarAlinhamentoTabela(sheets, spreadsheetId, "Registro de Ponto");
+        // Aplicada exclusivamente na entrada e saída do ponto
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -497,7 +489,9 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
+        // Aplicada ao adicionar nova missão no progresso diário e na aba Missões
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -544,7 +538,8 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
+        // Aplicada ao iniciar ou concluir missão
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
