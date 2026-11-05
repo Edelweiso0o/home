@@ -92,7 +92,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// FORMATAÇÃO CORRETA POR GRIDRANGE (Com limites exclusivos)
+// FORMATAÇÃO COM ESTILOS DE BORDA CORRETOS DA API DO GOOGLE SHEETS
 async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -180,7 +180,7 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 4. Bordas: Externa sólida e interna fina laranja
+    // 4. Bordas: Estilos corretos da API (SOLID para externas, THIN para internas laranjas)
     requests.push({
       updateBorders: {
         range: {
@@ -194,8 +194,8 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
         bottom: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
         left: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
         right: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        innerHorizontal: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } },
-        innerVertical: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } }
+        innerHorizontal: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } },
+        innerVertical: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } }
       }
     });
 
