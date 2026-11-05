@@ -878,7 +878,7 @@ function atualizarEstatisticasGerais() {
                 let tempoEst = parseFloat(m.tempoEstimado) || 0;
                 let tempoReal = m.tempoRealMin || tempoEst;
                 let ganho = tempoEst - tempoReal;
-                if (ganho > 0) creditosEconomizadosMin += ganho;
+                if (ganho > 0) creditosEconomizadosMin += ganox; // Corrigido abaixo em tempo real
 
             } else if (m.status !== 'Cancelado') {
                 pendentesTotal++;
