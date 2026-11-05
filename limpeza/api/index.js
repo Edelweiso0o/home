@@ -217,12 +217,12 @@ async function testarBordasTabela(sheets, spreadsheetId) {
             startColumnIndex,
             endColumnIndex
           },
-          top: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          bottom: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          left: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          right: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-          innerHorizontal: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } },
-          innerVertical: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } }
+          top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+          innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
         }
       }
     ];
