@@ -250,8 +250,7 @@ async function sincronizarComServidor(acao, payload) {
     try {
         const response = await fetch(API_URL, {
             method: "POST",
-            redirect: "follow",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ acao, ...payload })
         });
         const resJson = await response.json();
