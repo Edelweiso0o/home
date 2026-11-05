@@ -73,7 +73,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
             <div class="bg-[#17112d] border border-purple-900/50 p-4 rounded-2xl flex justify-between items-center">
                 <div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Tempo em Turno</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block" id="labelTurnoTitulo">Tempo em Turno</span>
                     <div class="text-xl font-black font-mono-code text-white mt-1" id="timerTurnoActual">00:00:00</div>
                 </div>
                 <div class="text-right">
@@ -138,9 +138,13 @@
                         <option value="Média">Média</option>
                         <option value="Baixa">Baixa</option>
                     </select>
-                    <button onclick="abrirModalDuplicarRapido()" class="px-3 py-1 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1" title="Repetir missão hoje">
+                    <button onclick="abrirModalDuplicarRapido()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1.5" title="Repetir missão hoje">
                         <i class="fa-solid fa-clone text-purple-400"></i>
                         <span>Repetir Missão</span>
+                    </button>
+                    <button onclick="abrirModalNovaMissao()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white transition flex items-center space-x-1.5 shadow-md" title="Adicionar nova missão">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>+ Adicionar Missão</span>
                     </button>
                 </div>
 
