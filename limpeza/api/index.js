@@ -92,92 +92,52 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// ROTINA ISOLADA: Aplica alinhamento centralizado na tabela, Título à esquerda e borda laranja interna
-async function aplicarAlinhamentoSimples(sheets, spreadsheetId) {
+// TESTE EXPLICITO: Escreve 100, pinta de Roxo e Centraliza a célula A1
+async function testarA1Roxo100(sheets, spreadsheetId) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
     if (!sheetObj) return;
     const sheetId = sheetObj.properties.sheetId;
 
-    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
-    const rows = resVals.data.values || [];
-    if (rows.length === 0) return;
+    // 1. Escreve o valor 100 em A1
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: "Progresso Diário!A1",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [[100]] }
+    });
 
-    const { headerRowIndex, colMap } = parseSheetRows(rows);
-    const validColIndexes = Object.values(colMap);
-    if (validColIndexes.length === 0 || headerRowIndex === -1) return;
-
-    const startRowIndex = headerRowIndex; 
-    const endRowIndex = rows.length; 
-    const startColumnIndex = Math.min(...validColIndexes);
-    const endColumnIndex = Math.max(...validColIndexes) + 1;
-
-    let requests = [
-      // 1. Centraliza todas as células de dados
+    // 2. Formata: Roxo e Centralizado
+    const requests = [
       {
         repeatCell: {
-          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
+          range: {
+            sheetId: sheetId,
+            startRowIndex: 0,
+            endRowIndex: 1,
+            startColumnIndex: 0,
+            endColumnIndex: 1
+          },
           cell: {
             userEnteredFormat: {
+              backgroundColor: { red: 0.5, green: 0, blue: 0.5 },
               horizontalAlignment: "CENTER",
-              verticalAlignment: "MIDDLE"
+              verticalAlignment: "MIDDLE",
+              textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: true }
             }
           },
-          fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
+          fields: "userEnteredFormat.backgroundColor,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat"
         }
       }
     ];
-
-    // 2. Alinha a coluna de Título da Missão especificamente à esquerda
-    const tituloColIdx = colMap["Título da Missão"];
-    if (tituloColIdx !== undefined) {
-      requests.push({
-        repeatCell: {
-          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex: tituloColIdx, endColumnIndex: tituloColIdx + 1 },
-          cell: {
-            userEnteredFormat: {
-              horizontalAlignment: "LEFT"
-            }
-          },
-          fields: "userEnteredFormat.horizontalAlignment"
-        }
-      });
-    }
-
-    // 3. Centraliza o Cabeçalho
-    requests.push({
-      repeatCell: {
-        range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
-        cell: {
-          userEnteredFormat: {
-            horizontalAlignment: "CENTER",
-            verticalAlignment: "MIDDLE"
-          }
-        },
-        fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
-      }
-    });
-
-    // 4. Bordas: Externa sólida e interna fina laranja
-    requests.push({
-      updateBorders: {
-        range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
-        top: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        bottom: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        left: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        right: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        innerHorizontal: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } },
-        innerVertical: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } }
-      }
-    });
 
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: { requests }
     });
   } catch (e) {
-    console.error("Erro na rotina de alinhamento:", e);
+    console.error("Erro no teste A1 Roxo:", e);
   }
 }
 
@@ -279,8 +239,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
       
-      // Dispara a rotina isolada de alinhamento e formatação a cada reload (GET)
-      await aplicarAlinhamentoSimples(sheets, spreadsheetId);
+      // Executa o teste do A1 Roxo com 100 centralizado a cada reload
+      await testarA1Roxo100(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -408,7 +368,6 @@ export default async function handler(req, res) {
           }
         }
 
-        await aplicarAlinhamentoSimples(sheets, spreadsheetId);
         return res.status(200).json({ status: "success" });
       }
 
@@ -443,7 +402,6 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        await aplicarAlinhamentoSimples(sheets, spreadsheetId);
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -490,7 +448,6 @@ export default async function handler(req, res) {
           }
         }
 
-        await aplicarAlinhamentoSimples(sheets, spreadsheetId);
         return res.status(200).json({ status: "success" });
       }
 
