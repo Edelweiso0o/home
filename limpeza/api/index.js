@@ -32,24 +32,58 @@ function columnToLetter(column) {
   return letter;
 }
 
+// Encontra dinamicamente a linha do cabeçalho e mapeia as colunas corretamente
+function parseSheetRows(rows) {
+  if (!rows || rows.length === 0) return { headerRowIndex: -1, colMap: {}, dataRows: [] };
+
+  let headerRowIndex = -1;
+  let colMap = {};
+
+  // Procura nas primeiras 5 linhas qual delas contém palavras-chave conhecidas
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const row = rows[i];
+    let matches = 0;
+    let tempMap = {};
+    row.forEach((cell, idx) => {
+      if (cell) {
+        const val = String(cell).trim();
+        tempMap[val] = idx;
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada'].includes(val)) {
+          matches++;
+        }
+      }
+    });
+    if (matches >= 2) {
+      headerRowIndex = i;
+      colMap = tempMap;
+      break;
+    }
+  }
+
+  // Fallback se não encontrar por correspondência exata
+  if (headerRowIndex === -1 && rows.length >= 2) {
+    headerRowIndex = 1;
+    rows[1].forEach((h, idx) => {
+      if (h) colMap[h.trim()] = idx;
+    });
+  }
+
+  const dataRows = headerRowIndex !== -1 ? rows.slice(headerRowIndex + 1) : [];
+  return { headerRowIndex, colMap, dataRows };
+}
+
 async function getSheetData(sheets, spreadsheetId, rangeName) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: rangeName,
   });
   const rows = res.data.values;
-  if (!rows || rows.length < 2) return [];
+  if (!rows || rows.length === 0) return [];
 
-  const header = rows[1]; 
-  const dataRows = rows.slice(2); 
-
-  let colMap = {};
-  header.forEach((h, idx) => {
-    if (h) colMap[h.trim()] = idx;
-  });
+  const { colMap, dataRows } = parseSheetRows(rows);
 
   return dataRows.map((row, rIdx) => {
-    let obj = { _linha: rIdx + 3 }; 
+    let obj = { _linha: rIdx + (rows.length - dataRows.length + 1) }; 
     Object.keys(colMap).forEach(key => {
       obj[key] = row[colMap[key]] !== undefined ? row[colMap[key]] : '';
     });
@@ -73,17 +107,14 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
 
     const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
     const rows = resVals.data.values || [];
-    if (rows.length < 3) return;
+    if (rows.length === 0) return;
 
-    const header = rows[1];
-    let colMap = {};
-    header.forEach((h, i) => { if (h) colMap[h.trim()] = i; });
-
-    const startRowIndex = 2; 
-    const endRowIndex = rows.length; 
+    const { colMap } = parseSheetRows(rows);
     const validColIndexes = Object.values(colMap);
     if (validColIndexes.length === 0) return;
 
+    const startRowIndex = 1; 
+    const endRowIndex = rows.length; 
     const startColumnIndex = Math.min(...validColIndexes);
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
@@ -105,12 +136,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
           innerHorizontal: { style: 'THIN', color: { red: 0.8, green: 0.8, blue: 0.8 } },
           innerVertical: { style: 'THIN', color: { red: 0.8, green: 0.8, blue: 0.8 } }
         }
-      },
-      {
-        updateBorders: {
-          range: { sheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex, endColumnIndex },
-          bottom: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } }
-        }
       }
     ];
 
@@ -124,26 +149,22 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
   const hojeStr = getDataHojeStr();
   
   const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z100" });
-  const mRows = missoesRes.data.values || [];
-  if (mRows.length < 3) return;
-  const mHeader = mRows[1];
-  const mData = mRows.slice(2);
-  let mColMap = {};
-  mHeader.forEach((h, i) => { if(h) mColMap[h.trim()] = i; });
+  const mParsed = parseSheetRows(missoesRes.data.values || []);
+  if (mParsed.dataRows.length === 0) return;
+  const mColMap = mParsed.colMap;
 
   const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
   const pRows = progRes.data.values || [];
-  const pHeader = pRows[1] || [];
-  let pColMap = {};
-  pHeader.forEach((h, i) => { if(h) pColMap[h.trim()] = i; });
+  const pParsed = parseSheetRows(pRows);
+  const pColMap = pParsed.colMap;
+  const pData = pParsed.dataRows;
 
-  const pData = pRows.slice(2);
   const jaTemHoje = pData.some(row => {
     const dataVal = row[pColMap["Data"]] || "";
     return String(dataVal).trim() === hojeStr;
   });
 
-  if (!jaTemHoje && mData.length > 0) {
+  if (!jaTemHoje && mParsed.dataRows.length > 0) {
     let maxId = 999;
     pData.forEach(row => {
       const idVal = parseInt(row[pColMap["ID"]], 10);
@@ -154,7 +175,7 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
     let newRows = [];
     let currentId = maxId + 1;
 
-    mData.forEach(mRow => {
+    mParsed.dataRows.forEach(mRow => {
       let titulo = mRow[mColMap["Título da Missão"]] || "";
       let comodo = mRow[mColMap["Cômodo"]] || "";
       let tempoEst = mRow[mColMap["Tempo Est. (min)"]] || "";
@@ -259,21 +280,19 @@ export default async function handler(req, res) {
 
       if (acao === 'baterPonto') {
         const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A1:Z500" });
-        const rows = resPonto.data.values || [];
-        const header = rows[1] || [];
-        let colMap = {};
-        header.forEach((h, i) => { if(h) colMap[h.trim()] = i; });
+        const pParsed = parseSheetRows(resPonto.data.values || []);
+        const colMap = pParsed.colMap;
 
         if (data.status === 'ENTRADA') {
           let maxId = 999;
-          rows.slice(2).forEach(r => {
+          pParsed.dataRows.forEach(r => {
             const idVal = parseInt(r[colMap["ID Turno"]], 10);
             if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
           });
           const novoIdTurno = maxId + 1;
-          const nextRow = Math.max(rows.length + 1, 3);
+          const nextRow = (resPonto.data.values || []).length + 1;
 
-          let maxColIndex = Math.max(...Object.values(colMap));
+          let maxColIndex = Math.max(...Object.values(colMap), 0);
           let rowArray = new Array(maxColIndex + 1).fill("");
           
           if (colMap["ID Turno"] !== undefined) rowArray[colMap["ID Turno"]] = novoIdTurno;
@@ -366,20 +385,18 @@ export default async function handler(req, res) {
 
       if (acao === 'adicionarMissao') {
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
-        const rows = progRes.data.values || [];
-        const header = rows[1] || [];
-        let colMap = {};
-        header.forEach((h, i) => { if(h) colMap[h.trim()] = i; });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const colMap = pParsed.colMap;
 
         let maxId = 999;
-        rows.slice(2).forEach(r => {
+        pParsed.dataRows.forEach(r => {
           const idVal = parseInt(r[colMap["ID"]], 10);
           if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
         });
         const novoId = maxId + 1;
-        const nextRow = Math.max(rows.length + 1, 3);
+        const nextRow = (progRes.data.values || []).length + 1;
 
-        let maxColIndex = Math.max(...Object.values(colMap));
+        let maxColIndex = Math.max(...Object.values(colMap), 0);
         let rowArray = new Array(maxColIndex + 1).fill("");
         
         if (colMap["ID"] !== undefined) rowArray[colMap["ID"]] = novoId;
@@ -405,10 +422,9 @@ export default async function handler(req, res) {
 
       if (acao === 'atualizarEstadoMissao' || acao === 'concluirMissao') {
         const dados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z2" });
-        const header = progRes.data.values[1] || [];
-        let colMap = {};
-        header.forEach((h, i) => { if(h) colMap[h.trim()] = i; });
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const colMap = pParsed.colMap;
 
         let missaoAlvo = dados.find(m => String(m.id) === String(data.id) && m.data === hojeStr) ||
                            dados.find(m => String(m.id) === String(data.id));
@@ -466,10 +482,9 @@ export default async function handler(req, res) {
 
       if (acao === 'editarMissao') {
         const dados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z2" });
-        const header = progRes.data.values[1] || [];
-        let colMap = {};
-        header.forEach((h, i) => { if(h) colMap[h.trim()] = i; });
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const colMap = pParsed.colMap;
 
         const missaoAlvo = dados.find(m => String(m.id) === String(data.id));
         if (missaoAlvo) {
