@@ -92,52 +92,119 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// TESTE EXPLICITO: Escreve 100, pinta de Roxo e Centraliza a célula A1
-async function testarA1Roxo100(sheets, spreadsheetId) {
+// FORMATAÇÃO POR INTERVALO NUMÉRICO (GridRange)
+async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
     if (!sheetObj) return;
     const sheetId = sheetObj.properties.sheetId;
 
-    // 1. Escreve o valor 100 em A1
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: "Progresso Diário!A1",
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: [[100]] }
-    });
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const rows = resVals.data.values || [];
+    if (rows.length === 0) return;
 
-    // 2. Formata: Roxo e Centralizado
-    const requests = [
+    const { headerRowIndex, colMap } = parseSheetRows(rows);
+    const validColIndexes = Object.values(colMap);
+    if (validColIndexes.length === 0 || headerRowIndex === -1) return;
+
+    const startRowIndex = headerRowIndex; 
+    const endRowIndex = rows.length; 
+    const startColumnIndex = Math.min(...validColIndexes);
+    const endColumnIndex = Math.max(...validColIndexes) + 1;
+
+    let requests = [
+      // 1. Centraliza toda a tabela de dados
       {
         repeatCell: {
           range: {
-            sheetId: sheetId,
-            startRowIndex: 0,
-            endRowIndex: 1,
-            startColumnIndex: 0,
-            endColumnIndex: 1
+            sheetId,
+            startRowIndex: startRowIndex + 1,
+            endRowIndex,
+            startColumnIndex,
+            endColumnIndex
           },
           cell: {
             userEnteredFormat: {
-              backgroundColor: { red: 0.5, green: 0, blue: 0.5 },
               horizontalAlignment: "CENTER",
               verticalAlignment: "MIDDLE",
-              textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: true }
+              textFormat: { fontFamily: "Roboto", fontSize: 10 }
             }
           },
-          fields: "userEnteredFormat.backgroundColor,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat"
+          fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat"
         }
       }
     ];
+
+    // 2. Alinha especificamente a coluna de Título da Missão à Esquerda
+    const tituloColIdx = colMap["Título da Missão"];
+    if (tituloColIdx !== undefined) {
+      requests.push({
+        repeatCell: {
+          range: {
+            sheetId,
+            startRowIndex: startRowIndex + 1,
+            endRowIndex,
+            startColumnIndex: tituloColIdx,
+            endColumnIndex: tituloColIdx + 1
+          },
+          cell: {
+            userEnteredFormat: {
+              horizontalAlignment: "LEFT"
+            }
+          },
+          fields: "userEnteredFormat.horizontalAlignment"
+        }
+      });
+    }
+
+    // 3. Formata o Cabeçalho (Fundo Escuro, Texto Branco, Centralizado)
+    requests.push({
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex,
+          endRowIndex: startRowIndex + 1,
+          startColumnIndex,
+          endColumnIndex
+        },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
+            textFormat: { fontFamily: "Roboto", fontSize: 10, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+            horizontalAlignment: "CENTER",
+            verticalAlignment: "MIDDLE"
+          }
+        },
+        fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
+      }
+    });
+
+    // 4. Aplica Bordas: Externa sólida preta e interna fina LARANJA
+    requests.push({
+      updateBorders: {
+        range: {
+          sheetId,
+          startRowIndex,
+          endRowIndex,
+          startColumnIndex,
+          endColumnIndex
+        },
+        top: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        bottom: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        left: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        right: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        innerHorizontal: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } },
+        innerVertical: { style: "SOLID_THIN", color: { red: 1, green: 0.5, blue: 0 } }
+      }
+    });
 
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: { requests }
     });
   } catch (e) {
-    console.error("Erro no teste A1 Roxo:", e);
+    console.error("Erro ao formatar tabela por intervalo:", e);
   }
 }
 
@@ -210,6 +277,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
+      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -238,9 +306,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
-      
-      // Executa o teste do A1 Roxo com 100 centralizado a cada reload
-      await testarA1Roxo100(sheets, spreadsheetId);
+      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -368,6 +434,7 @@ export default async function handler(req, res) {
           }
         }
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -402,6 +469,7 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -448,6 +516,7 @@ export default async function handler(req, res) {
           }
         }
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
