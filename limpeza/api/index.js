@@ -92,6 +92,87 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
+// Verifica em segundo plano e injeta as missões do dia se ainda não existirem na planilha
+async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
+  try {
+    const hojeStr = getDataHojeStr();
+    
+    // Busca as missões padrão base
+    const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z100" });
+    const mParsed = parseSheetRows(missoesRes.data.values || []);
+    if (mParsed.dataRows.length === 0) return;
+    const mColMap = mParsed.colMap;
+
+    // Busca o progresso diário atual
+    const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+    const pRows = progRes.data.values || [];
+    const pParsed = parseSheetRows(pRows);
+    const pColMap = pParsed.colMap;
+    const pData = pParsed.dataRows;
+
+    // Pega todas as missões que já estão cadastradas para hoje na aba Progresso Diário
+    const missoesHojeNaPlanilha = pData.filter(row => {
+      const dataVal = row[pColMap["Data"]] || "";
+      return String(dataVal).trim() === hojeStr;
+    });
+
+    let maxId = 999;
+    pData.forEach(row => {
+      const idVal = parseInt(row[pColMap["ID"]], 10);
+      if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
+    });
+
+    let nextRow = pRows.length + 1;
+    let newRows = [];
+    let currentId = maxId + 1;
+
+    // Para cada missão base, verifica se já existe uma linha com o mesmo título para a data de hoje
+    mParsed.dataRows.forEach(mRow => {
+      let titulo = mRow[mColMap["Título da Missão"]] || "";
+      let comodo = mRow[mColMap["Cômodo"]] || "";
+      let tempoEst = mRow[mColMap["Tempo Est. (min)"]] || "";
+      let prioridade = mRow[mColMap["Prioridade"]] || "Média";
+
+      if (titulo) {
+        const jaExiste = missoesHojeNaPlanilha.some(pRow => {
+          const tVal = pRow[pColMap["Título da Missão"]] || "";
+          return String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase();
+        });
+
+        if (!jaExiste) {
+          let maxColIndex = Math.max(...Object.values(pColMap), 0);
+          let rowArray = new Array(maxColIndex + 1).fill("");
+          
+          if (pColMap["ID"] !== undefined) rowArray[pColMap["ID"]] = currentId;
+          if (pColMap["Data"] !== undefined) rowArray[pColMap["Data"]] = hojeStr;
+          if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
+          if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
+          if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
+          if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
+          if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
+          if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
+          if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
+
+          newRows.push(rowArray);
+          currentId++;
+        }
+      }
+    });
+
+    // Se houver missões pendentes para hoje que ainda não foram inseridas, adiciona em lote
+    if (newRows.length > 0) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: `Progresso Diário!A${nextRow}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: newRows }
+      });
+    }
+  } catch (e) {
+    console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -113,6 +194,9 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
+      // Dispara a checagem e inserção em segundo plano a cada requisição GET (reload/abertura da página)
+      await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
+
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
       const missoes = await getSheetData(sheets, spreadsheetId, "Missões!A1:Z500");
