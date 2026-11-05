@@ -22,6 +22,16 @@ function getHoraAtualStr() {
   return new Intl.DateTimeFormat('pt-BR', options).format(d);
 }
 
+function columnToLetter(column) {
+  let temp, letter = '';
+  while (column > 0) {
+    temp = (column - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter;
+    column = (column - temp - 1) / 26;
+  }
+  return letter;
+}
+
 async function getSheetData(sheets, spreadsheetId, rangeName) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -52,6 +62,85 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
     obj.status = obj["Status"] || obj["Status do Turno"] || "";
     return obj;
   });
+}
+
+async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
+    if (!sheetObj) return;
+    const sheetId = sheetObj.properties.sheetId;
+
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const rows = resVals.data.values || [];
+    if (rows.length < 3) return;
+
+    const header = rows[1];
+    let minCol = 0, maxCol = header.length - 1;
+    let colMap = {};
+    header.forEach((h, i) => { if (h) colMap[h.trim()] = i; });
+
+    const startRowIndex = 2; // Linha 3 (índice 2)
+    const endRowIndex = rows.length; // Até a última linha
+    const startColumnIndex = Math.min(...Object.values(colMap));
+    const endColumnIndex = Math.max(...Object.values(colMap)) + 1;
+
+    let requests = [
+      {
+        repeatCell: {
+          range: {
+            sheetId,
+            startRowIndex: 1, // Cabeçalho + dados
+            endRowIndex,
+            startColumnIndex,
+            endColumnIndex
+          },
+          cell: {
+            userEnteredFormat: {
+              textFormat: { fontFamily: "Roboto" }
+            }
+          },
+          fields: "userEnteredFormat.textFormat.fontFamily"
+        }
+      },
+      {
+        updateBorders: {
+          range: {
+            sheetId,
+            startRowIndex,
+            endRowIndex,
+            startColumnIndex,
+            endColumnIndex
+          },
+          top: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          bottom: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          left: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          right: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          innerHorizontal: { style: 'THIN', color: { red: 0.8, green: 0.8, blue: 0.8 } },
+          innerVertical: { style: 'THIN', color: { red: 0.8, green: 0.8, blue: 0.8 } }
+        }
+      },
+      {
+        updateBorders: {
+          range: {
+            sheetId,
+            startRowIndex: 1,
+            endRowIndex: 2,
+            startColumnIndex,
+            endColumnIndex
+          },
+          bottom: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } }
+        }
+      }
+    ];
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests }
+    });
+  } catch (e) {
+    console.error("Erro ao formatar tabela:", e);
+  }
 }
 
 async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
@@ -118,6 +207,7 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
+      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
     }
   }
 }
@@ -254,6 +344,8 @@ export default async function handler(req, res) {
             });
           }
         }
+
+        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -291,6 +383,7 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -344,6 +437,8 @@ export default async function handler(req, res) {
             });
           }
         }
+
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
@@ -370,6 +465,8 @@ export default async function handler(req, res) {
             }
           });
         }
+
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
@@ -397,6 +494,8 @@ export default async function handler(req, res) {
             }
           });
         }
+
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
@@ -408,14 +507,4 @@ export default async function handler(req, res) {
     console.error(error);
     res.status(500).json({ status: "error", message: error.toString() });
   }
-}
-
-function columnToLetter(column) {
-  let temp, letter = '';
-  while (column > 0) {
-    temp = (column - 1) % 26;
-    letter = String.fromCharCode(temp + 65) + letter;
-    column = (column - temp - 1) / 26;
-  }
-  return letter;
 }
