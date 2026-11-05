@@ -168,7 +168,6 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
         rowArray[pColMap["Status"]] = "Pendente";
         rowArray[pColMap["Hora de Início"]] = "";
         rowArray[pColMap["Hora de Término"]] = "";
-        // NÃO mexe na coluna de Créditos na geração automática
         newRows.push(rowArray);
         currentId++;
       }
@@ -273,7 +272,6 @@ export default async function handler(req, res) {
           rowArray[colMap["Data"]] = hojeStr;
           rowArray[colMap["Hora Entrada"]] = data.horaExata || getHoraAtualStr();
           rowArray[colMap["Hora Saída"]] = "";
-          // Coluna Duração removida/ignorada
           rowArray[colMap["Tempo Trabalhado"]] = "";
           rowArray[colMap["Créditos"]] = "0s";
           rowArray[colMap["Status do Turno"]] = "Em Serviço";
@@ -300,7 +298,6 @@ export default async function handler(req, res) {
           if (linhaTurno !== -1) {
             const horaSaidaStr = data.horaExata || getHoraAtualStr();
             
-            // Calcula tempo trabalhado em segundos
             const turnoAlvo = dadosPonto.find(t => t._linha === linhaTurno);
             const horaEntradaStr = turnoAlvo["Hora Entrada"] || "00:00:00";
             
@@ -315,7 +312,6 @@ export default async function handler(req, res) {
             const segsTrab = String(segsTrabalhoVal % 60).padStart(2, '0');
             const tempoTrabalhadoFormatado = `${horasTrab}:${minsTrab}:${segsTrab}`;
 
-            // Soma o tempo estimado (em minutos) de todas as missões concluídas hoje
             const progressoDados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
             let totalMinutosMissoes = 0;
             progressoDados.forEach(m => {
@@ -327,7 +323,6 @@ export default async function handler(req, res) {
 
             const totalSegsMissoes = totalMinutosMissoes * 60;
 
-            // Créditos do ponto = Tempo Trabalhado - Tempo das Missões (Não pode ser negativo)
             const creditosPontoSegs = Math.max(0, segsTrabalhoVal - totalSegsMissoes);
             const minCred = Math.floor(creditosPontoSegs / 60);
             const segCred = creditosPontoSegs % 60;
@@ -381,7 +376,6 @@ export default async function handler(req, res) {
         rowArray[colMap["Status"]] = "Pendente";
         rowArray[colMap["Hora de Início"]] = "";
         rowArray[colMap["Hora de Término"]] = "";
-        // Coluna créditos vazia na adição
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -423,7 +417,6 @@ export default async function handler(req, res) {
             let tempoReal = data.tempoRealMin !== undefined ? parseFloat(data.tempoRealMin) : NaN;
             if (isNaN(tempoReal)) tempoReal = tempoEst;
 
-            // Créditos da missão = Tempo Estimado - Tempo Real (Garante que não fica negativo)
             const creditosMin = Math.max(0, tempoEst - tempoReal);
             let creditosFormatados = "0s";
             if (creditosMin > 0) {
