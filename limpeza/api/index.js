@@ -92,7 +92,6 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// Rotina de formatação completa (roda assincronamente em background)
 async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -292,7 +291,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      // Executa formatação em background
       formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
     }
   } catch (e) {
@@ -321,7 +319,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      // Dispara em background para responder instantaneamente ao navegador
       sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId).catch(err => console.error(err));
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
@@ -455,40 +452,68 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'adicionarMissao') {
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
-        const pParsed = parseSheetRows(progRes.data.values || []);
-        const colMap = pParsed.colMap;
+        // 1. Cadastra primeiro na aba "Missões"
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+        const mParsed = parseSheetRows(missoesRes.data.values || []);
+        const mColMap = mParsed.colMap;
 
-        let maxId = 999;
-        pParsed.dataRows.forEach(r => {
-          const idVal = parseInt(r[colMap["ID"]], 10);
-          if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
+        let maxIdMissao = 999;
+        mParsed.dataRows.forEach(r => {
+          let idVal = parseInt(r[mColMap["ID"]], 10);
+          if (!isNaN(idVal) && idVal > maxIdMissao) maxIdMissao = idVal;
         });
-        const novoId = maxId + 1;
-        const nextRow = (progRes.data.values || []).length + 1;
+        const novoIdBase = maxIdMissao + 1;
+        const nextRowMissao = (missoesRes.data.values || []).length + 1;
 
-        let maxColIndex = Math.max(...Object.values(colMap), 0);
-        let rowArray = new Array(maxColIndex + 1).fill("");
-        
-        if (colMap["ID"] !== undefined) rowArray[colMap["ID"]] = novoId;
-        if (colMap["Data"] !== undefined) rowArray[colMap["Data"]] = data.data || hojeStr;
-        if (colMap["Título da Missão"] !== undefined) rowArray[colMap["Título da Missão"]] = data.titulo;
-        if (colMap["Cômodo"] !== undefined) rowArray[colMap["Cômodo"]] = data.comodo;
-        if (colMap["Tempo Est. (min)"] !== undefined) rowArray[colMap["Tempo Est. (min)"]] = data.tempoEstimado;
-        if (colMap["Prioridade"] !== undefined) rowArray[colMap["Prioridade"]] = data.prioridade;
-        if (colMap["Status"] !== undefined) rowArray[colMap["Status"]] = "Pendente";
-        if (colMap["Crédito"] !== undefined) rowArray[colMap["Crédito"]] = "";
+        let maxColM = Math.max(...Object.values(mColMap), 0);
+        let rowArrayM = new Array(maxColM + 1).fill("");
+        if (mColMap["ID"] !== undefined) rowArrayM[mColMap["ID"]] = novoIdBase;
+        if (mColMap["Título da Missão"] !== undefined) rowArrayM[mColMap["Título da Missão"]] = data.titulo;
+        if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
+        if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
+        if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
-          range: `Progresso Diário!A${nextRow}`,
+          range: `Missões!A${nextRowMissao}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [rowArray] }
+          requestBody: { values: [rowArrayM] }
+        });
+        formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
+
+        // 2. Passa para a aba "Progresso Diário"
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const pColMap = pParsed.colMap;
+
+        let maxIdProg = 999;
+        pParsed.dataRows.forEach(r => {
+          let idVal = parseInt(r[pColMap["ID"]], 10);
+          if (!isNaN(idVal) && idVal > maxIdProg) maxIdProg = idVal;
+        });
+        const novoIdProg = maxIdProg + 1;
+        const nextRowProg = (progRes.data.values || []).length + 1;
+
+        let maxColP = Math.max(...Object.values(pColMap), 0);
+        let rowArrayP = new Array(maxColP + 1).fill("");
+        if (pColMap["ID"] !== undefined) rowArrayP[pColMap["ID"]] = novoIdProg;
+        if (pColMap["Data"] !== undefined) rowArrayP[pColMap["Data"]] = data.data || hojeStr;
+        if (pColMap["Título da Missão"] !== undefined) rowArrayP[pColMap["Título da Missão"]] = data.titulo;
+        if (pColMap["Cômodo"] !== undefined) rowArrayP[pColMap["Cômodo"]] = data.comodo;
+        if (pColMap["Tempo Est. (min)"] !== undefined) rowArrayP[pColMap["Tempo Est. (min)"]] = data.tempoEstimado;
+        if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
+        if (pColMap["Status"] !== undefined) rowArrayP[pColMap["Status"]] = "Pendente";
+        if (pColMap["Crédito"] !== undefined) rowArrayP[pColMap["Crédito"]] = "";
+
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: `Progresso Diário!A${nextRowProg}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [rowArrayP] }
         });
 
         formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
-        formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
-        return res.status(200).json({ status: "success", id: novoId });
+        return res.status(200).json({ status: "success", id: novoIdProg });
       }
 
       if (acao === 'atualizarEstadoMissao' || acao === 'concluirMissao') {
