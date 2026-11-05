@@ -297,7 +297,6 @@ export default async function handler(req, res) {
 
           if (linhaTurno !== -1) {
             const horaSaidaStr = data.horaExata || getHoraAtualStr();
-            
             const turnoAlvo = dadosPonto.find(t => t._linha === linhaTurno);
             const horaEntradaStr = turnoAlvo["Hora Entrada"] || "00:00:00";
             
@@ -322,7 +321,6 @@ export default async function handler(req, res) {
             });
 
             const totalSegsMissoes = totalMinutosMissoes * 60;
-
             const creditosPontoSegs = Math.max(0, segsTrabalhoVal - totalSegsMissoes);
             const minCred = Math.floor(creditosPontoSegs / 60);
             const segCred = creditosPontoSegs % 60;
