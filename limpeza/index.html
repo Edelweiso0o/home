@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Central de Tarefas - RPG Dashboard</title>
+    <title>Central de Tarefas v2.0.0 - RPG Dashboard</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧹</text></svg>">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
 </head>
-<body class="bg-[#0f0b1e] text-slate-100 min-h-screen flex flex-col justify-between selection:bg-purple-500 selection:text-slate-900 relative">
+<body class="bg-[#0f0b1e] text-slate-100 h-screen overflow-hidden flex flex-col justify-between selection:bg-purple-500 selection:text-slate-900 relative">
 
     <div id="globalLoader" class="hidden fixed top-3 right-4 z-50 items-center space-x-2 bg-[#090614]/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/60 text-purple-400 text-xs font-mono-code shadow-2xl shadow-purple-600/30">
         <i class="fa-solid fa-rotate animate-spin text-purple-400"></i>
@@ -22,7 +22,7 @@
 
     <div id="toastContainer" class="fixed bottom-6 right-6 z-[9999] flex flex-col space-y-3 pointer-events-none"></div>
 
-    <header class="border-b border-purple-900/50 bg-[#17112d]/90 backdrop-blur-md sticky top-0 z-40">
+    <header class="border-b border-purple-900/50 bg-[#17112d]/90 backdrop-blur-md sticky top-0 z-40 shrink-0">
         <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-3">
                 <a href="../index.html" class="w-10 h-10 rounded-xl bg-[#231a42] border border-purple-800/60 hover:border-purple-500 flex items-center justify-center text-purple-300 hover:text-white transition" title="Voltar ao Painel Principal">
@@ -32,12 +32,15 @@
                     <i class="fa-solid fa-broom-ball text-lg"></i>
                 </div>
                 <div>
-                    <h1 class="text-base font-black uppercase tracking-wider text-white">Central de <span class="text-purple-400">Tarefas</span></h1>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-base font-black uppercase tracking-wider text-white">Central de <span class="text-purple-400">Tarefas</span></h1>
+                        <span class="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono-code">v2.0.0</span>
+                    </div>
                     <p class="text-[11px] text-purple-300/70 font-mono-code">Gerenciador de Limpeza Doméstica</p>
                 </div>
             </div>
             
-            <div class="flex items-center space-x-4 pr-24">
+            <div class="flex items-center space-x-4 pr-4">
                 <div class="hidden sm:flex items-center space-x-2 bg-[#090614] px-3.5 py-2 rounded-xl border border-purple-900/60">
                     <i class="fa-regular fa-calendar-days text-xs text-purple-400"></i>
                     <span class="text-xs font-bold font-mono-code text-slate-300" id="dateRealtime">--/--/----</span>
@@ -57,17 +60,17 @@
                     </button>
                 </div>
 
-                <button onclick="abrirModalConfig()" class="w-10 h-10 rounded-xl bg-[#231a42] border border-purple-800/60 hover:border-purple-500 flex items-center justify-center text-purple-300 hover:text-white transition" title="Configurações e Limpeza">
-                    <i class="fa-solid fa-gear text-base"></i>
+                <button onclick="abrirModalNovaMissao()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition font-mono-code flex items-center space-x-1.5 shadow-lg shadow-purple-600/30">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Nova Missão</span>
                 </button>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 py-6 w-full flex-grow space-y-6">
+    <main class="max-w-7xl mx-auto px-4 py-4 w-full flex-grow flex flex-col space-y-4 overflow-hidden">
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
             <div class="bg-[#17112d] border border-purple-900/50 p-4 rounded-2xl flex justify-between items-center">
                 <div>
                     <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Tempo em Turno</span>
@@ -105,160 +108,187 @@
                 </div>
                 <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-mono-code text-purple-200/80" id="boxConcluidasPorComodo"></div>
             </div>
-
         </div>
 
-        <div id="modalDetalhesComodo" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-            <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[80vh] flex flex-col">
-                <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
-                    <h3 class="text-sm font-bold text-emerald-400 uppercase tracking-wider" id="modalComodoTitulo">Detalhes do Ambiente</h3>
-                    <button onclick="fecharModalDetalhesComodo()" class="text-purple-300/50 hover:text-white transition">
-                        <i class="fa-solid fa-xmark text-lg"></i>
+        <div class="flex-grow flex flex-col space-y-3 overflow-hidden bg-[#17112d]/40 border border-purple-900/40 p-4 rounded-2xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-3 shrink-0">
+                <div class="flex space-x-2">
+                    <button onclick="mudarVisaoPrincipal('fila')" id="btnVisaoFila" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md">
+                        <i class="fa-solid fa-list-check mr-1.5"></i> Fila de Missões
+                    </button>
+                    <button onclick="mudarVisaoPrincipal('historico')" id="btnVisaoHistorico" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition">
+                        <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Histórico Geral
                     </button>
                 </div>
-                <div id="modalComodoConteudo" class="space-y-2.5 overflow-y-auto flex-grow pr-1"></div>
-            </div>
-        </div>
 
-        <div id="modalEditarMissao" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-            <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-                <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
-                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Editar Missão</h3>
-                    <button onclick="fecharModalEdicao()" class="text-purple-300/50 hover:text-white transition">
-                        <i class="fa-solid fa-xmark text-lg"></i>
-                    </button>
-                </div>
-                <form id="formEditarMissao" onsubmit="salvarEdicaoMissao(event)" class="space-y-3">
-                    <input type="hidden" id="editIdMissao">
-                    <input type="hidden" id="editTituloOriginal">
-                    <div>
-                        <label class="text-[11px] font-mono-code text-purple-300/70">Título da Tarefa</label>
-                        <input type="text" id="editInputTitulo" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white mt-1">
-                    </div>
-                    <div>
-                        <label class="text-[11px] font-mono-code text-purple-300/70">Cômodo</label>
-                        <select id="editSelectComodo" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
-                            <option value="Quarto">Quarto</option>
-                            <option value="Banheiro">Banheiro</option>
-                            <option value="Cozinha">Cozinha</option>
-                            <option value="Sala">Sala</option>
-                            <option value="Lavanderia">Lavanderia</option>
-                            <option value="Quintal">Quintal</option>
-                            <option value="Corredor">Corredor</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-[11px] font-mono-code text-purple-300/70">Tempo Estimado (min)</label>
-                        <input type="number" id="editInputTempoEstimado" required min="5" max="180" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white mt-1">
-                    </div>
-                    <div>
-                        <label class="text-[11px] font-mono-code text-purple-300/70">Prioridade</label>
-                        <select id="editSelectPrioridade" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
-                            <option value="Alta">Alta</option>
-                            <option value="Média">Média</option>
-                            <option value="Baixa">Baixa</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center space-x-2 pt-1">
-                        <input type="checkbox" id="editInputUnica" class="w-4 h-4 rounded bg-[#090614] border-purple-800 text-purple-600">
-                        <label for="editInputUnica" class="text-xs text-purple-200">Missão Única (não repete todo dia)</label>
-                    </div>
-                    <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
-                        <button type="button" onclick="fecharModalEdicao()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 hover:bg-purple-950/30 transition">Cancelar</button>
-                        <button type="submit" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Salvar Alterações</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="lg:col-span-2 space-y-4">
-                
-                <div class="flex space-x-2 border-b border-purple-900/50 pb-2 items-center justify-between">
-                    <div class="flex space-x-2">
-                        <button onclick="mudarVisaoPrincipal('fila')" id="btnVisaoFila" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md">
-                            <i class="fa-solid fa-list-check mr-1.5"></i> Fila de Missões
-                        </button>
-                        <button onclick="mudarVisaoPrincipal('historico')" id="btnVisaoHistorico" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition">
-                            <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Histórico Geral
-                        </button>
-                    </div>
-
-                    <button onclick="abrirModalDuplicarRapido()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1" title="Repetir missão hoje">
+                <div id="filtrosFilaContainer" class="flex items-center space-x-2">
+                    <select id="filtroFilaComodo" onchange="renderizarMissoes()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <option value="TODOS">Todos os Cômodos</option>
+                        <option value="Quarto">Quarto</option>
+                        <option value="Banheiro">Banheiro</option>
+                        <option value="Cozinha">Cozinha</option>
+                        <option value="Sala">Sala</option>
+                        <option value="Lavanderia">Lavanderia</option>
+                        <option value="Quintal">Quintal</option>
+                        <option value="Corredor">Corredor</option>
+                    </select>
+                    <select id="filtroFilaPrioridade" onchange="renderizarMissoes()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <option value="TODOS">Todas Prioridades</option>
+                        <option value="Alta">Alta</option>
+                        <option value="Média">Média</option>
+                        <option value="Baixa">Baixa</option>
+                    </select>
+                    <button onclick="abrirModalDuplicarRapido()" class="px-3 py-1 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1" title="Repetir missão hoje">
                         <i class="fa-solid fa-clone text-purple-400"></i>
                         <span>Repetir Missão</span>
                     </button>
                 </div>
 
-                <div id="secaoFilaMissoes" class="space-y-3">
-                    <div class="space-y-3" id="listaMissoesContainer"></div>
+                <div id="filtrosHistoricoHeaderContainer" class="hidden flex items-center space-x-2">
+                    <select id="filtroHistoricoComodo" onchange="renderizarHistoricoGeral()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <option value="TODOS">Todos os Cômodos</option>
+                        <option value="Quarto">Quarto</option>
+                        <option value="Banheiro">Banheiro</option>
+                        <option value="Cozinha">Cozinha</option>
+                        <option value="Sala">Sala</option>
+                        <option value="Lavanderia">Lavanderia</option>
+                        <option value="Quintal">Quintal</option>
+                        <option value="Corredor">Corredor</option>
+                    </select>
+                    <select id="filtroHistoricoStatus" onchange="renderizarHistoricoGeral()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <option value="TODOS">Todos os Status</option>
+                        <option value="Concluído">Concluído</option>
+                        <option value="Pendente">Pendente</option>
+                        <option value="Cancelado">Cancelado</option>
+                    </select>
+                    <input type="date" id="filtroHistoricoData" onchange="renderizarHistoricoGeral()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white font-mono-code">
+                    <button onclick="limparFiltroData()" class="text-purple-300/50 hover:text-white text-xs px-1" title="Limpar data">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
                 </div>
-
-                <div id="secaoHistoricoGeral" class="space-y-4 hidden">
-                    <div class="bg-[#17112d] border border-purple-900/50 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                            <label class="text-[10px] font-mono-code text-purple-300/70 block mb-1">Filtrar por Cômodo</label>
-                            <select id="filtroHistoricoComodo" onchange="renderizarHistoricoGeral()" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1.5 text-xs text-white">
-                                <option value="TODOS">Todos os Cômodos</option>
-                                <option value="Quarto">Quarto</option>
-                                <option value="Banheiro">Banheiro</option>
-                                <option value="Cozinha">Cozinha</option>
-                                <option value="Sala">Sala</option>
-                                <option value="Lavanderia">Lavanderia</option>
-                                <option value="Quintal">Quintal</option>
-                                <option value="Corredor">Corredor</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-mono-code text-purple-300/70 block mb-1">Filtrar por Status</label>
-                            <select id="filtroHistoricoStatus" onchange="renderizarHistoricoGeral()" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1.5 text-xs text-white">
-                                <option value="TODOS">Todos os Status</option>
-                                <option value="Concluído">Concluído</option>
-                                <option value="Pendente">Pendente</option>
-                                <option value="Cancelado">Cancelado</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-mono-code text-purple-300/70 block mb-1">Filtrar por Data</label>
-                            <input type="text" id="filtroHistoricoData" oninput="renderizarHistoricoGeral()" placeholder="Ex: 04/11/2026" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-1.5 text-xs text-white">
-                        </div>
-                    </div>
-
-                    <div class="space-y-2.5" id="listaHistoricoContainer"></div>
-                </div>
-
             </div>
 
-            <div class="space-y-6">
-                <div class="bg-[#17112d] border border-purple-900/50 p-5 rounded-2xl space-y-4">
-                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Cadastrar Missão</h3>
-                    <form id="formNovaMissao" onsubmit="cadastrarMissao(event)" class="space-y-3">
-                        <input type="text" id="inputTitulo" required placeholder="Título da Tarefa" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white">
-                        <select id="selectComodo" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white">
-                            <option value="Quarto">Quarto</option>
-                            <option value="Banheiro">Banheiro</option>
-                            <option value="Cozinha">Cozinha</option>
-                            <option value="Sala">Sala</option>
-                            <option value="Lavanderia">Lavanderia</option>
-                            <option value="Quintal">Quintal</option>
-                            <option value="Corredor">Corredor</option>
-                        </select>
-                        <input type="number" id="inputTempoEstimado" required min="5" max="180" value="15" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white">
-                        <select id="selectPrioridade" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white">
-                            <option value="Alta">Alta</option>
-                            <option value="Média" selected>Média</option>
-                            <option value="Baixa">Baixa</option>
-                        </select>
-                        <div class="flex items-center space-x-2 pt-1">
-                            <input type="checkbox" id="inputUnica" class="w-4 h-4 rounded bg-[#090614] border-purple-800 text-purple-600">
-                            <label for="inputUnica" class="text-xs text-purple-200">Missão Única (não repete todo dia)</label>
-                        </div>
-                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs py-2.5 rounded-xl transition font-mono-code">Adicionar à Fila</button>
-                    </form>
-                </div>
+            <div id="secaoFilaMissoes" class="flex-grow overflow-y-auto pr-1">
+                <div class="space-y-3" id="listaMissoesContainer"></div>
+            </div>
+
+            <div id="secaoHistoricoGeral" class="flex-grow overflow-y-auto pr-1 space-y-2.5 hidden">
+                <div class="space-y-2.5" id="listaHistoricoContainer"></div>
             </div>
         </div>
     </main>
+
+    <div id="modalNovaMissao" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
+                <h3 class="text-sm font-bold text-white uppercase tracking-wider">Cadastrar Nova Missão</h3>
+                <button onclick="fecharModalNovaMissao()" class="text-purple-300/50 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="formNovaMissao" onsubmit="cadastrarMissao(event)" class="space-y-3">
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Título da Tarefa</label>
+                    <input type="text" id="inputTitulo" required placeholder="Ex: Lavar Louça" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Cômodo</label>
+                    <select id="selectComodo" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
+                        <option value="Quarto">Quarto</option>
+                        <option value="Banheiro">Banheiro</option>
+                        <option value="Cozinha">Cozinha</option>
+                        <option value="Sala">Sala</option>
+                        <option value="Lavanderia">Lavanderia</option>
+                        <option value="Quintal">Quintal</option>
+                        <option value="Corredor">Corredor</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Tempo Estimado (min)</label>
+                    <input type="number" id="inputTempoEstimado" required min="5" max="180" value="15" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Prioridade</label>
+                    <select id="selectPrioridade" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
+                        <option value="Alta">Alta</option>
+                        <option value="Média" selected>Média</option>
+                        <option value="Baixa">Baixa</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2 pt-1">
+                    <input type="checkbox" id="inputUnica" class="w-4 h-4 rounded bg-[#090614] border-purple-800 text-purple-600">
+                    <label for="inputUnica" class="text-xs text-purple-200">Missão Única (não repete todo dia)</label>
+                </div>
+                <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
+                    <button type="button" onclick="fecharModalNovaMissao()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 hover:bg-purple-950/30 transition">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Adicionar à Fila</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modalDetalhesComodo" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
+                <h3 class="text-sm font-bold text-emerald-400 uppercase tracking-wider" id="modalComodoTitulo">Detalhes do Ambiente</h3>
+                <button onclick="fecharModalDetalhesComodo()" class="text-purple-300/50 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div id="modalComodoConteudo" class="space-y-2.5 overflow-y-auto flex-grow pr-1"></div>
+        </div>
+    </div>
+
+    <div id="modalEditarMissao" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
+                <h3 class="text-sm font-bold text-white uppercase tracking-wider">Editar Missão</h3>
+                <button onclick="fecharModalEdicao()" class="text-purple-300/50 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="formEditarMissao" onsubmit="salvarEdicaoMissao(event)" class="space-y-3">
+                <input type="hidden" id="editIdMissao">
+                <input type="hidden" id="editTituloOriginal">
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Título da Tarefa</label>
+                    <input type="text" id="editInputTitulo" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Cômodo</label>
+                    <select id="editSelectComodo" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
+                        <option value="Quarto">Quarto</option>
+                        <option value="Banheiro">Banheiro</option>
+                        <option value="Cozinha">Cozinha</option>
+                        <option value="Sala">Sala</option>
+                        <option value="Lavanderia">Lavanderia</option>
+                        <option value="Quintal">Quintal</option>
+                        <option value="Corredor">Corredor</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Tempo Estimado (min)</label>
+                    <input type="number" id="editInputTempoEstimado" required min="5" max="180" class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Prioridade</label>
+                    <select id="editSelectPrioridade" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
+                        <option value="Alta">Alta</option>
+                        <option value="Média">Média</option>
+                        <option value="Baixa">Baixa</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2 pt-1">
+                    <input type="checkbox" id="editInputUnica" class="w-4 h-4 rounded bg-[#090614] border-purple-800 text-purple-600">
+                    <label for="editInputUnica" class="text-xs text-purple-200">Missão Única (não repete todo dia)</label>
+                </div>
+                <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
+                    <button type="button" onclick="fecharModalEdicao()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 hover:bg-purple-950/30 transition">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div id="modalDuplicarRapido" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
