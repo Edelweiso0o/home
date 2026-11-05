@@ -92,7 +92,6 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// APLICA FORMATAÇÃO VISUAL COMPLETA NA PLANILHA GOOGLE
 async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -114,7 +113,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
-      // 1. Aplica Fonte Roboto e Alinhamento Vertical Centralizado em toda a tabela
       {
         repeatCell: {
           range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
@@ -127,10 +125,9 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
           fields: "userEnteredFormat.textFormat,userEnteredFormat.verticalAlignment"
         }
       },
-      // 2. Formata o Cabeçalho (Fundo Cinza Escuro, Texto Branco Negrito e Alinhamento Centralizado)
       {
         repeatCell: {
-          range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
+          range: { sheetId, startRowIndex: headerRowIndex, endRowIndex: headerRowIndex + 1, startColumnIndex, endColumnIndex },
           cell: {
             userEnteredFormat: {
               backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
@@ -141,7 +138,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
           fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment"
         }
       },
-      // 3. Aplica Bordas na Tabela Inteira (Borda externa sólida e internas finas)
       {
         updateBorders: {
           range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
