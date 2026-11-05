@@ -4,7 +4,8 @@ let estadoPonto = {
     trabalhando: false,
     inicioTurnoMs: null,
     segundosTurnoAtual: 0,
-    totalSegundosTrabalhados: 0
+    totalSegundosTrabalhados: 0,
+    ultimoTempoTrabalhadoFormatado: "00:00:00"
 };
 
 let missoes = [];
@@ -213,6 +214,15 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                 }
             }
 
+            if (data.turnos && data.turnos.length > 0) {
+                turnosRegistrados = data.turnos;
+                // Procura o último turno registrado para exibir caso esteja de folga
+                const ultimoTurno = data.turnos[data.turnos.length - 1];
+                if (ultimoTurno && ultimoTurno["Tempo Trabalhado"]) {
+                    estadoPonto.ultimoTempoTrabalhadoFormatado = ultimoTurno["Tempo Trabalhado"];
+                }
+            }
+
             if (data.missoes && data.missoes.length > 0) {
                 data.missoes.forEach(mServidor => {
                     let mLocal = missoes.find(x => String(x.id) === String(mServidor.id) && String(x.data || '') === String(mServidor.data || ''));
@@ -229,7 +239,6 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                 });
                 missoes = data.missoes;
             }
-            if (data.turnos) turnosRegistrados = data.turnos;
             if (data.estatisticas) contadorConcluidas = data.estatisticas.concluidas || 0;
         }
 
@@ -265,6 +274,15 @@ async function sincronizarComServidor(acao, payload) {
 }
 
 async function alternarPonto() {
+    // Validação: Não permitir encerrar o ponto se houver alguma missão "Em Andamento"
+    if (estadoPonto.trabalhando) {
+        const missaoEmAndamento = missoes.find(m => m.estadoMissao === 'EmAndamento' || m.status === 'Em Andamento');
+        if (missaoEmAndamento) {
+            mostrarNotificacao("Ação Bloqueada", `Conclua a missão "${missaoEmAndamento.titulo}" antes de encerrar o turno!`, "aviso", 4000);
+            return;
+        }
+    }
+
     const proximoStatus = !estadoPonto.trabalhando;
     
     if (proximoStatus) {
@@ -301,11 +319,20 @@ async function alternarPonto() {
 }
 
 function atualizarDisplaysPonto() {
-    const hTurno = String(Math.floor(estadoPonto.segundosTurnoAtual / 3600)).padStart(2, '0');
-    const mTurno = String(Math.floor((estadoPonto.segundosTurnoAtual % 3600) / 60)).padStart(2, '0');
-    const sTurno = String(estadoPonto.segundosTurnoAtual % 60).padStart(2, '0');
     const elTimerTurno = document.getElementById('timerTurnoActual');
-    if (elTimerTurno) elTimerTurno.innerText = `${hTurno}:${mTurno}:${sTurno}`;
+    const elLabelTitulo = document.getElementById('labelTurnoTitulo');
+
+    if (estadoPonto.trabalhando) {
+        const hTurno = String(Math.floor(estadoPonto.segundosTurnoAtual / 3600)).padStart(2, '0');
+        const mTurno = String(Math.floor((estadoPonto.segundosTurnoAtual % 3600) / 60)).padStart(2, '0');
+        const sTurno = String(estadoPonto.segundosTurnoAtual % 60).padStart(2, '0');
+        if (elTimerTurno) elTimerTurno.innerText = `${hTurno}:${mTurno}:${sTurno}`;
+        if (elLabelTitulo) elLabelTitulo.innerText = "Tempo em Turno";
+    } else {
+        // Quando estiver de folga, exibe o último tempo trabalhado no turno
+        if (elTimerTurno) elTimerTurno.innerText = estadoPonto.ultimoTempoTrabalhadoFormatado || "00:00:00";
+        if (elLabelTitulo) elLabelTitulo.innerText = "Último Turno";
+    }
 
     const badge = document.getElementById('badgePontoStatus');
     const textStatus = document.getElementById('textPontoStatus');
@@ -405,7 +432,7 @@ async function cadastrarMissao(event) {
     if (missaoUnicaEl) missaoUnicaEl.checked = false;
     fecharModalNovaMissao();
     carregarUltimasPreferenciasSelects();
-    mostrarNotificacao("Sucesso", "Missão adicionada à fila.", "sucesso", 2000);
+    mostrarNotificacao("Sucesso", "Missão adicionada à aba Missões e à fila de progresso.", "sucesso", 2000);
 
     const resposta = await sincronizarComServidor('adicionarMissao', novaMissao);
     if (resposta && resposta.status === 'success' && resposta.id) {
