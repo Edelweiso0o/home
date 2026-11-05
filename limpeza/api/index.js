@@ -92,7 +92,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// FORMATAÇÃO POR INTERVALO NUMÉRICO (GridRange)
+// FORMATAÇÃO CORRETA POR GRIDRANGE (Com limites exclusivos)
 async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -114,7 +114,7 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
-      // 1. Centraliza toda a tabela de dados
+      // 1. Centraliza os dados da tabela
       {
         repeatCell: {
           range: {
@@ -136,7 +136,7 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       }
     ];
 
-    // 2. Alinha especificamente a coluna de Título da Missão à Esquerda
+    // 2. Alinha especificamente a coluna "Título da Missão" à Esquerda
     const tituloColIdx = colMap["Título da Missão"];
     if (tituloColIdx !== undefined) {
       requests.push({
@@ -158,7 +158,7 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       });
     }
 
-    // 3. Formata o Cabeçalho (Fundo Escuro, Texto Branco, Centralizado)
+    // 3. Formata o Cabeçalho
     requests.push({
       repeatCell: {
         range: {
@@ -180,7 +180,7 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 4. Aplica Bordas: Externa sólida preta e interna fina LARANJA
+    // 4. Bordas: Externa sólida e interna fina laranja
     requests.push({
       updateBorders: {
         range: {
