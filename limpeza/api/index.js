@@ -1,0 +1,327 @@
+import { google } from 'googleapis';
+
+function getAuth() {
+  const credentialsJson = process.env.GOOGLE_CREDENTIALS;
+  if (!credentialsJson) throw new Error('GOOGLE_CREDENTIALS missing');
+  const credentials = JSON.parse(credentialsJson);
+  return new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+}
+
+function getDataHojeStr() {
+  const d = new Date();
+  const options = { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' };
+  return new Intl.DateTimeFormat('pt-BR', options).format(d);
+}
+
+function getHoraAtualStr() {
+  const d = new Date();
+  const options = { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+  return new Intl.DateTimeFormat('pt-BR', options).format(d);
+}
+
+function columnToLetter(column) {
+  let temp, letter = '';
+  while (column > 0) {
+    temp = (column - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter;
+    column = (column - temp - 1) / 26;
+  }
+  return letter;
+}
+
+function parseSheetRows(rows) {
+  if (!rows || rows.length === 0) return { headerRowIndex: -1, colMap: {}, dataRows: [] };
+
+  let headerRowIndex = -1;
+  let colMap = {};
+
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const row = rows[i];
+    let matches = 0;
+    let tempMap = {};
+    row.forEach((cell, idx) => {
+      if (cell) {
+        const val = String(cell).trim();
+        tempMap[val] = idx;
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada'].includes(val)) {
+          matches++;
+        }
+      }
+    });
+    if (matches >= 2) {
+      headerRowIndex = i;
+      colMap = tempMap;
+      break;
+    }
+  }
+
+  if (headerRowIndex === -1 && rows.length >= 2) {
+    headerRowIndex = 1;
+    rows[1].forEach((h, idx) => {
+      if (h) colMap[h.trim()] = idx;
+    });
+  }
+
+  const dataRows = headerRowIndex !== -1 ? rows.slice(headerRowIndex + 1) : [];
+  return { headerRowIndex, colMap, dataRows };
+}
+
+async function getSheetData(sheets, spreadsheetId, rangeName) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: rangeName });
+  const rows = res.data.values;
+  if (!rows || rows.length === 0) return [];
+
+  const { colMap, dataRows } = parseSheetRows(rows);
+
+  return dataRows.map((row, rIdx) => {
+    let obj = { _linha: rIdx + (rows.length - dataRows.length + 1) }; 
+    Object.keys(colMap).forEach(key => {
+      obj[key] = row[colMap[key]] !== undefined ? row[colMap[key]] : '';
+    });
+    obj.id = obj["ID"] || obj["ID Turno"] || obj.id || "";
+    obj.data = obj["Data"] || "";
+    obj.titulo = obj["Título da Missão"] || "";
+    obj.comodo = obj["Cômodo"] || "";
+    obj.tempoEstimado = obj["Tempo Est. (min)"] || "";
+    obj.prioridade = obj["Prioridade"] || "";
+    obj.status = obj["Status"] || obj["Status do Turno"] || "";
+    return obj;
+  });
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    const auth = getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.SPREADSHEET_ID;
+
+    if (!spreadsheetId) {
+      return res.status(500).json({ status: 'error', message: 'SPREADSHEET_ID is missing' });
+    }
+
+    if (req.method === 'GET') {
+      const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
+      const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
+      const missoes = await getSheetData(sheets, spreadsheetId, "Missões!A1:Z500");
+
+      const hojeStr = getDataHojeStr();
+      let pontoAtivo = false;
+      let horaEntradaMs = null;
+
+      for (let i = turnos.length - 1; i >= 0; i--) {
+        const t = turnos[i];
+        if (t.data === hojeStr) {
+          const st = (t["Status do Turno"] || "").toUpperCase();
+          const hs = t["Hora Saída"] || "";
+          if (st === "EM SERVIÇO" || !hs) {
+            pontoAtivo = true;
+            const horaEnt = t["Hora Entrada"] || "";
+            if (horaEnt) {
+              const [d, m, y] = hojeStr.split('/');
+              const [h, min, s] = horaEnt.split(':');
+              horaEntradaMs = new Date(y, m - 1, d, h, min, s || 0).getTime();
+            }
+            break;
+          }
+        }
+      }
+
+      const concluidasCount = progresso.filter(p => p.status === "Concluído").length;
+
+      return res.status(200).json({
+        status: "success",
+        missoes: progresso.length > 0 ? progresso : missoes,
+        turnos: turnos,
+        pontoAtivo: pontoAtivo,
+        horaEntradaMs: horaEntradaMs,
+        estatisticas: { concluidas: concluidasCount }
+      });
+    }
+
+    if (req.method === 'POST') {
+      const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const acao = data.acao;
+      const hojeStr = getDataHojeStr();
+
+      if (acao === 'baterPonto') {
+        const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A1:Z500" });
+        const pParsed = parseSheetRows(resPonto.data.values || []);
+        const colMap = pParsed.colMap;
+
+        if (data.status === 'ENTRADA') {
+          let maxId = 999;
+          pParsed.dataRows.forEach(r => {
+            const idVal = parseInt(r[colMap["ID Turno"]], 10);
+            if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
+          });
+          const novoIdTurno = maxId + 1;
+          const nextRow = (resPonto.data.values || []).length + 1;
+
+          let maxColIndex = Math.max(...Object.values(colMap), 0);
+          let rowArray = new Array(maxColIndex + 1).fill("");
+          
+          if (colMap["ID Turno"] !== undefined) rowArray[colMap["ID Turno"]] = novoIdTurno;
+          if (colMap["Data"] !== undefined) rowArray[colMap["Data"]] = hojeStr;
+          if (colMap["Hora Entrada"] !== undefined) rowArray[colMap["Hora Entrada"]] = data.horaExata || getHoraAtualStr();
+          if (colMap["Hora Saída"] !== undefined) rowArray[colMap["Hora Saída"]] = "";
+          if (colMap["Tempo Trabalhado"] !== undefined) rowArray[colMap["Tempo Trabalhado"]] = "";
+          if (colMap["Créditos"] !== undefined) rowArray[colMap["Créditos"]] = "0s";
+          if (colMap["Status do Turno"] !== undefined) rowArray[colMap["Status do Turno"]] = "Em Serviço";
+
+          await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `Registro de Ponto!A${nextRow}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [rowArray] }
+          });
+        } else if (data.status === 'SAIDA') {
+          const dadosPonto = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
+          let linhaTurno = -1;
+          for (let i = dadosPonto.length - 1; i >= 0; i--) {
+            const t = dadosPonto[i];
+            const st = (t["Status do Turno"] || "").toUpperCase();
+            const hs = t["Hora Saída"] || "";
+            if ((t.data === hojeStr || !t.data) && (st === "EM SERVIÇO" || !hs)) {
+              linhaTurno = t._linha;
+              break;
+            }
+          }
+          if (linhaTurno === -1 && dadosPonto.length > 0) {
+            const ultimo = dadosPonto[dadosPonto.length - 1];
+            if (!ultimo["Hora Saída"] || (ultimo["Status do Turno"] || "").toUpperCase() === "EM SERVIÇO") {
+              linhaTurno = ultimo._linha;
+            }
+          }
+
+          if (linhaTurno !== -1) {
+            const horaSaidaStr = data.horaExata || getHoraAtualStr();
+            const turnoAlvo = dadosPonto.find(t => t._linha === linhaTurno);
+            const horaEntradaStr = turnoAlvo["Hora Entrada"] || "00:00:00";
+            
+            const [he, me, se] = horaEntradaStr.split(':').map(Number);
+            const [hs2, ms2, ss2] = horaSaidaStr.split(':').map(Number);
+            
+            const totalSegsTrabalho = (hs2 * 3600 + ms2 * 60 + (ss2 || 0)) - (he * 3600 + me * 60 + (se || 0));
+            const segsTrabalhoVal = Math.max(0, totalSegsTrabalho);
+            
+            const horasTrab = String(Math.floor(segsTrabalhoVal / 3600)).padStart(2, '0');
+            const minsTrab = String(Math.floor((segsTrabalhoVal % 3600) / 60)).padStart(2, '0');
+            const segsTrab = String(segsTrabalhoVal % 60).padStart(2, '0');
+            const tempoTrabalhadoFormatado = `${horasTrab}:${minsTrab}:${segsTrab}`;
+
+            let updates = [];
+            if (colMap["Hora Saída"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] });
+            if (colMap["Status do Turno"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] });
+            if (colMap["Tempo Trabalhado"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
+
+            if (updates.length > 0) {
+              await sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+              });
+            }
+          }
+        }
+
+        return res.status(200).json({ status: "success" });
+      }
+
+      if (acao === 'adicionarMissao') {
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const colMap = pParsed.colMap;
+
+        let maxId = 999;
+        pParsed.dataRows.forEach(r => {
+          const idVal = parseInt(r[colMap["ID"]], 10);
+          if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
+        });
+        const novoId = maxId + 1;
+        const nextRow = (progRes.data.values || []).length + 1;
+
+        let maxColIndex = Math.max(...Object.values(colMap), 0);
+        let rowArray = new Array(maxColIndex + 1).fill("");
+        
+        if (colMap["ID"] !== undefined) rowArray[colMap["ID"]] = novoId;
+        if (colMap["Data"] !== undefined) rowArray[colMap["Data"]] = data.data || hojeStr;
+        if (colMap["Título da Missão"] !== undefined) rowArray[colMap["Título da Missão"]] = data.titulo;
+        if (colMap["Cômodo"] !== undefined) rowArray[colMap["Cômodo"]] = data.comodo;
+        if (colMap["Tempo Est. (min)"] !== undefined) rowArray[colMap["Tempo Est. (min)"]] = data.tempoEstimado;
+        if (colMap["Prioridade"] !== undefined) rowArray[colMap["Prioridade"]] = data.prioridade;
+        if (colMap["Status"] !== undefined) rowArray[colMap["Status"]] = "Pendente";
+
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: `Progresso Diário!A${nextRow}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [rowArray] }
+        });
+
+        return res.status(200).json({ status: "success", id: novoId });
+      }
+
+      if (acao === 'atualizarEstadoMissao' || acao === 'concluirMissao') {
+        const dados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const colMap = pParsed.colMap;
+
+        let missaoAlvo = null;
+        if (data.titulo) {
+          missaoAlvo = dados.slice().reverse().find(m => String(m.titulo).trim().toLowerCase() === String(data.titulo).trim().toLowerCase() && (m.data === hojeStr || !m.data));
+        }
+        if (!missaoAlvo) {
+          missaoAlvo = dados.find(m => String(m.id) === String(data.id));
+        }
+
+        if (missaoAlvo) {
+          const linha = missaoAlvo._linha;
+          let updates = [];
+
+          if (data.estadoMissao === 'EmAndamento') {
+            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
+            if (data.horaExata && colMap["Hora de Início"] !== undefined) {
+              updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaExata]] });
+            }
+          } else if (acao === 'concluirMissao') {
+            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
+            if (data.horaExata && colMap["Hora de Término"] !== undefined) {
+              updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
+            }
+          } else if (data.estadoMissao === 'Cancelado') {
+            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
+          }
+
+          if (updates.length > 0) {
+            await sheets.spreadsheets.batchUpdate({
+              spreadsheetId,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+            });
+          }
+        }
+
+        return res.status(200).json({ status: "success" });
+      }
+
+      return res.status(400).json({ status: "error", message: "Ação desconhecida" });
+    }
+
+    res.status(405).json({ status: "error", message: "Method not allowed" });
+  } catch (error) {
+    console.error("ERRO CRITICO API:", error);
+    res.status(500).json({ status: "error", message: error.toString() });
+  }
+}
