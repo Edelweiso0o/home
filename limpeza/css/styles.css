@@ -9,7 +9,7 @@ body {
     font-family: 'Fira Code', monospace;
 }
 
-/* Custom Scrollbar Violeta */
+/* Custom Scrollbar Violeta restrita ao container interno */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -23,6 +23,12 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: #a855f7;
+}
+
+/* Customização do calendário de data */
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8) sepia(1) saturate(5) hue-rotate(220deg);
+    cursor: pointer;
 }
 
 /* Animação para Missões Críticas e Urgentes */
