@@ -294,7 +294,6 @@ export default async function handler(req, res) {
               break;
             }
           }
-          // Fallback se não achar pela data exata de hoje, pega o último em aberto independentemente da data
           if (linhaTurno === -1 && dadosPonto.length > 0) {
             const ultimo = dadosPonto[dadosPonto.length - 1];
             if (!ultimo["Hora Saída"] || (ultimo["Status do Turno"] || "").toUpperCase() === "EM SERVIÇO") {
@@ -400,11 +399,9 @@ export default async function handler(req, res) {
         let colMap = {};
         header.forEach((h, i) => { if(h) colMap[h.trim()] = i; });
 
-        // Busca flexível por ID (independente de bater exatamente a string da data se houver leve defasagem)
         let missaoAlvo = dados.find(m => String(m.id) === String(data.id) && m.data === hojeStr) ||
                            dados.find(m => String(m.id) === String(data.id));
 
-        // Se ainda não achou, tenta achar pela última linha com o mesmo Título caso o ID local difira do ID remoto
         if (!missaoAlvo && data.titulo) {
           missaoAlvo = dados.slice().reverse().find(m => m.titulo.toLowerCase() === String(data.titulo).toLowerCase());
         }
