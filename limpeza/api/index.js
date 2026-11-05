@@ -92,8 +92,8 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// FORMATAÇÃO LIMPA E SEGURA SEM ERROS DE ENUM
-async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
+// 1. ROTINA DE ALINHAMENTO JÁ TESTADA (Centralizado, Título à esquerda, Cabeçalho estilizado)
+async function formatarAlinhamentoTabela(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
@@ -114,7 +114,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
-      // 1. Centraliza os dados da tabela
       {
         repeatCell: {
           range: {
@@ -136,7 +135,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       }
     ];
 
-    // 2. Alinha especificamente a coluna "Título da Missão" à Esquerda
     const tituloColIdx = colMap["Título da Missão"];
     if (tituloColIdx !== undefined) {
       requests.push({
@@ -158,7 +156,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       });
     }
 
-    // 3. Formata o Cabeçalho
     requests.push({
       repeatCell: {
         range: {
@@ -185,7 +182,57 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       requestBody: { requests }
     });
   } catch (e) {
-    console.error("Erro ao formatar tabela por intervalo:", e);
+    console.error(`Erro ao alinhar tabela ${sheetName}:`, e);
+  }
+}
+
+// 2. ROTINA SEPARADA EM TESTES: Aplica as bordas (Externa média e Interna fina laranja) no Progresso Diário
+async function testarBordasTabela(sheets, spreadsheetId) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
+    if (!sheetObj) return;
+    const sheetId = sheetObj.properties.sheetId;
+
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+    const rows = resVals.data.values || [];
+    if (rows.length === 0) return;
+
+    const { headerRowIndex, colMap } = parseSheetRows(rows);
+    const validColIndexes = Object.values(colMap);
+    if (validColIndexes.length === 0 || headerRowIndex === -1) return;
+
+    const startRowIndex = headerRowIndex; 
+    const endRowIndex = rows.length; 
+    const startColumnIndex = Math.min(...validColIndexes);
+    const endColumnIndex = Math.max(...validColIndexes) + 1;
+
+    const requests = [
+      {
+        updateBorders: {
+          range: {
+            sheetId,
+            startRowIndex,
+            endRowIndex,
+            startColumnIndex,
+            endColumnIndex
+          },
+          top: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          bottom: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          left: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          right: { style: "MEDIUM", color: { red: 0, green: 0, blue: 0 } },
+          innerHorizontal: { style: "STYLE_THIN", color: { red: 1, green: 0.5, blue: 0 } },
+          innerVertical: { style: "STYLE_THIN", color: { red: 1, green: 0.5, blue: 0 } }
+        }
+      }
+    ];
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests }
+    });
+  } catch (e) {
+    console.error("Erro ao testar bordas:", e);
   }
 }
 
@@ -258,7 +305,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
+      // Condição: Alinhamento ao criar missões no progresso diário
+      await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -287,7 +335,9 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
-      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
+      
+      // Dispara a rotina de teste de bordas a cada reload (GET)
+      await testarBordasTabela(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -415,7 +465,8 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
+        // Condição: Alinhamento aplicado na entrada/saída do ponto
+        await formatarAlinhamentoTabela(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -450,7 +501,8 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
+        // Condição: Alinhamento ao adicionar nova missão no progresso diário
+        await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -497,7 +549,8 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
+        // Condição: Alinhamento ao iniciar ou concluir missão
+        await formatarAlinhamentoTabela(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
