@@ -81,8 +81,11 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
 
     const startRowIndex = 2; 
     const endRowIndex = rows.length; 
-    const startColumnIndex = Math.min(...Object.values(colMap));
-    const endColumnIndex = Math.max(...Object.values(colMap)) + 1;
+    const validColIndexes = Object.values(colMap);
+    if (validColIndexes.length === 0) return;
+
+    const startColumnIndex = Math.min(...validColIndexes);
+    const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
       {
@@ -131,10 +134,10 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
   const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
   const pRows = progRes.data.values || [];
   const pHeader = pRows[1] || [];
-  const pData = pRows.slice(2);
   let pColMap = {};
   pHeader.forEach((h, i) => { if(h) pColMap[h.trim()] = i; });
 
+  const pData = pRows.slice(2);
   const jaTemHoje = pData.some(row => {
     const dataVal = row[pColMap["Data"]] || "";
     return String(dataVal).trim() === hojeStr;
@@ -158,16 +161,19 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
       let prioridade = mRow[mColMap["Prioridade"]] || "Média";
 
       if (titulo) {
-        let rowArray = new Array(Math.max(...Object.values(pColMap)) + 1).fill("");
-        rowArray[pColMap["ID"]] = currentId;
-        rowArray[pColMap["Data"]] = hojeStr;
-        rowArray[pColMap["Título da Missão"]] = titulo;
-        rowArray[pColMap["Cômodo"]] = comodo;
-        rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
-        rowArray[pColMap["Prioridade"]] = prioridade;
-        rowArray[pColMap["Status"]] = "Pendente";
-        rowArray[pColMap["Hora de Início"]] = "";
-        rowArray[pColMap["Hora de Término"]] = "";
+        let maxColIndex = Math.max(...Object.values(pColMap));
+        let rowArray = new Array(maxColIndex + 1).fill("");
+        
+        if (pColMap["ID"] !== undefined) rowArray[pColMap["ID"]] = currentId;
+        if (pColMap["Data"] !== undefined) rowArray[pColMap["Data"]] = hojeStr;
+        if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
+        if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
+        if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
+        if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
+        if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
+        if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
+        if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
+
         newRows.push(rowArray);
         currentId++;
       }
@@ -267,14 +273,16 @@ export default async function handler(req, res) {
           const novoIdTurno = maxId + 1;
           const nextRow = Math.max(rows.length + 1, 3);
 
-          let rowArray = new Array(Math.max(...Object.values(colMap)) + 1).fill("");
-          rowArray[colMap["ID Turno"]] = novoIdTurno;
-          rowArray[colMap["Data"]] = hojeStr;
-          rowArray[colMap["Hora Entrada"]] = data.horaExata || getHoraAtualStr();
-          rowArray[colMap["Hora Saída"]] = "";
-          rowArray[colMap["Tempo Trabalhado"]] = "";
-          rowArray[colMap["Créditos"]] = "0s";
-          rowArray[colMap["Status do Turno"]] = "Em Serviço";
+          let maxColIndex = Math.max(...Object.values(colMap));
+          let rowArray = new Array(maxColIndex + 1).fill("");
+          
+          if (colMap["ID Turno"] !== undefined) rowArray[colMap["ID Turno"]] = novoIdTurno;
+          if (colMap["Data"] !== undefined) rowArray[colMap["Data"]] = hojeStr;
+          if (colMap["Hora Entrada"] !== undefined) rowArray[colMap["Hora Entrada"]] = data.horaExata || getHoraAtualStr();
+          if (colMap["Hora Saída"] !== undefined) rowArray[colMap["Hora Saída"]] = "";
+          if (colMap["Tempo Trabalhado"] !== undefined) rowArray[colMap["Tempo Trabalhado"]] = "";
+          if (colMap["Créditos"] !== undefined) rowArray[colMap["Créditos"]] = "0s";
+          if (colMap["Status do Turno"] !== undefined) rowArray[colMap["Status do Turno"]] = "Em Serviço";
 
           await sheets.spreadsheets.values.append({
             spreadsheetId,
@@ -337,17 +345,18 @@ export default async function handler(req, res) {
               creditosPontoFormatado = hC > 0 ? `${hC}h e ${mC}min` : `${mC}min e ${segCred}s`;
             }
 
-            let updates = [
-              { range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] },
-              { range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] },
-              { range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] },
-              { range: `Registro de Ponto!${columnToLetter(colMap["Créditos"] + 1)}${linhaTurno}`, values: [[creditosPontoFormatado]] }
-            ];
+            let updates = [];
+            if (colMap["Hora Saída"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] });
+            if (colMap["Status do Turno"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] });
+            if (colMap["Tempo Trabalhado"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
+            if (colMap["Créditos"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Créditos"] + 1)}${linhaTurno}`, values: [[creditosPontoFormatado]] });
 
-            await sheets.spreadsheets.batchUpdate({
-              spreadsheetId,
-              requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
-            });
+            if (updates.length > 0) {
+              await sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+              });
+            }
           }
         }
 
@@ -370,16 +379,18 @@ export default async function handler(req, res) {
         const novoId = maxId + 1;
         const nextRow = Math.max(rows.length + 1, 3);
 
-        let rowArray = new Array(Math.max(...Object.values(colMap)) + 1).fill("");
-        rowArray[colMap["ID"]] = novoId;
-        rowArray[colMap["Data"]] = data.data || hojeStr;
-        rowArray[colMap["Título da Missão"]] = data.titulo;
-        rowArray[colMap["Cômodo"]] = data.comodo;
-        rowArray[colMap["Tempo Est. (min)"]] = data.tempoEstimado;
-        rowArray[colMap["Prioridade"]] = data.prioridade;
-        rowArray[colMap["Status"]] = "Pendente";
-        rowArray[colMap["Hora de Início"]] = "";
-        rowArray[colMap["Hora de Término"]] = "";
+        let maxColIndex = Math.max(...Object.values(colMap));
+        let rowArray = new Array(maxColIndex + 1).fill("");
+        
+        if (colMap["ID"] !== undefined) rowArray[colMap["ID"]] = novoId;
+        if (colMap["Data"] !== undefined) rowArray[colMap["Data"]] = data.data || hojeStr;
+        if (colMap["Título da Missão"] !== undefined) rowArray[colMap["Título da Missão"]] = data.titulo;
+        if (colMap["Cômodo"] !== undefined) rowArray[colMap["Cômodo"]] = data.comodo;
+        if (colMap["Tempo Est. (min)"] !== undefined) rowArray[colMap["Tempo Est. (min)"]] = data.tempoEstimado;
+        if (colMap["Prioridade"] !== undefined) rowArray[colMap["Prioridade"]] = data.prioridade;
+        if (colMap["Status"] !== undefined) rowArray[colMap["Status"]] = "Pendente";
+        if (colMap["Hora de Início"] !== undefined) rowArray[colMap["Hora de Início"]] = "";
+        if (colMap["Hora de Término"] !== undefined) rowArray[colMap["Hora de Término"]] = "";
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -411,13 +422,13 @@ export default async function handler(req, res) {
           let updates = [];
 
           if (data.estadoMissao === 'EmAndamento') {
-            updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
-            if (data.horaExata) {
+            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
+            if (data.horaExata && colMap["Hora de Início"] !== undefined) {
               updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaExata]] });
             }
           } else if (acao === 'concluirMissao') {
-            updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
-            if (data.horaExata) {
+            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
+            if (data.horaExata && colMap["Hora de Término"] !== undefined) {
               updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
             }
 
@@ -434,9 +445,11 @@ export default async function handler(req, res) {
               creditosFormatados = m > 0 ? `${m}min e ${s}s` : `${s}s`;
             }
 
-            updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Créditos"] + 1)}${linha}`, values: [[creditosFormatados]] });
+            if (colMap["Créditos"] !== undefined) {
+              updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Créditos"] + 1)}${linha}`, values: [[creditosFormatados]] });
+            }
           } else if (data.estadoMissao === 'Cancelado') {
-            updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
+            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
           }
 
           if (updates.length > 0) {
@@ -461,18 +474,19 @@ export default async function handler(req, res) {
         const missaoAlvo = dados.find(m => String(m.id) === String(data.id));
         if (missaoAlvo) {
           const linha = missaoAlvo._linha;
-          await sheets.spreadsheets.batchUpdate({
-            spreadsheetId,
-            requestBody: {
-              valueInputOption: 'USER_ENTERED',
-              data: [
-                { range: `Progresso Diário!${columnToLetter(colMap["Título da Missão"] + 1)}${linha}`, values: [[data.titulo]] },
-                { range: `Progresso Diário!${columnToLetter(colMap["Cômodo"] + 1)}${linha}`, values: [[data.comodo]] },
-                { range: `Progresso Diário!${columnToLetter(colMap["Tempo Est. (min)"] + 1)}${linha}`, values: [[data.tempoEstimado]] },
-                { range: `Progresso Diário!${columnToLetter(colMap["Prioridade"] + 1)}${linha}`, values: [[data.prioridade]] }
-              ]
-            }
-          });
+          let batchUpdates = [];
+          
+          if (colMap["Título da Missão"] !== undefined) batchUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Título da Missão"] + 1)}${linha}`, values: [[data.titulo]] });
+          if (colMap["Cômodo"] !== undefined) batchUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Cômodo"] + 1)}${linha}`, values: [[data.comodo]] });
+          if (colMap["Tempo Est. (min)"] !== undefined) batchUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Tempo Est. (min)"] + 1)}${linha}`, values: [[data.tempoEstimado]] });
+          if (colMap["Prioridade"] !== undefined) batchUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Prioridade"] + 1)}${linha}`, values: [[data.prioridade]] });
+
+          if (batchUpdates.length > 0) {
+            await sheets.spreadsheets.batchUpdate({
+              spreadsheetId,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: batchUpdates }
+            });
+          }
         }
 
         await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
