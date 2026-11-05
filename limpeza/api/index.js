@@ -92,7 +92,6 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// ROTINA OFICIAL DE FORMATAÇÃO (Alinhamentos, Cabeçalho e Bordas Definitivas - Cabeçalho com borda preta)
 async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -114,7 +113,6 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
-      // 1. Centraliza os dados da tabela
       {
         repeatCell: {
           range: {
@@ -136,7 +134,6 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     ];
 
-    // 2. Alinha a coluna "Título da Missão" à Esquerda
     const tituloColIdx = colMap["Título da Missão"];
     if (tituloColIdx !== undefined) {
       requests.push({
@@ -158,7 +155,6 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       });
     }
 
-    // 3. Formata o Cabeçalho
     requests.push({
       repeatCell: {
         range: {
@@ -180,7 +176,6 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 4. Borda externa média preta e grade interna laranjada
     requests.push({
       updateBorders: {
         range: {
@@ -199,7 +194,6 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 5. Isola o cabeçalho com bordas pretas para evitar a grade laranja nele
     requests.push({
       updateBorders: {
         range: {
@@ -282,6 +276,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
           if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
           if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
           if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
+          if (pColMap["Crédito"] !== undefined) rowArray[pColMap["Crédito"]] = "";
 
           newRows.push(rowArray);
           currentId++;
@@ -296,7 +291,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      // Aplicada na criação das missões
       await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
@@ -453,7 +447,6 @@ export default async function handler(req, res) {
           }
         }
 
-        // Aplicada exclusivamente na entrada e saída do ponto
         await formatarTabelaCompleta(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
@@ -481,6 +474,7 @@ export default async function handler(req, res) {
         if (colMap["Tempo Est. (min)"] !== undefined) rowArray[colMap["Tempo Est. (min)"]] = data.tempoEstimado;
         if (colMap["Prioridade"] !== undefined) rowArray[colMap["Prioridade"]] = data.prioridade;
         if (colMap["Status"] !== undefined) rowArray[colMap["Status"]] = "Pendente";
+        if (colMap["Crédito"] !== undefined) rowArray[colMap["Crédito"]] = "";
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -489,7 +483,6 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        // Aplicada ao adicionar nova missão no progresso diário e na aba Missões
         await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         return res.status(200).json({ status: "success", id: novoId });
@@ -523,6 +516,33 @@ export default async function handler(req, res) {
             if (data.horaExata && colMap["Hora de Término"] !== undefined) {
               dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
             }
+
+            // Cálculo do Crédito: (Término - Início) - Tempo Estimado
+            // Onde o tempo economizado / ganho reflete o crédito.
+            if (colMap["Crédito"] !== undefined) {
+              const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || missaoAlvo.tempoEstimado) || 0;
+              const tempoRealMin = data.tempoRealMin !== undefined ? data.tempoRealMin : tempoEstMin;
+              
+              // Se levamos tempoRealMin para concluir e o estimado era tempoEstMin,
+              // o ganho em segundos ou minutos: (tempoEstMin * 60) - (tempoRealMin * 60)
+              // Conforme a regra: (término - início) em segundos menos o tempo estimado em segundos.
+              const diffSegs = (tempoEstMin * 60) - (tempoRealMin * 60);
+
+              let creditoFormatado = "";
+              if (diffSegs < 0) {
+                creditoFormatado = `${diffSegs}s`;
+              } else {
+                const mins = Math.floor(diffSegs / 60);
+                const segs = diffSegs % 60;
+                if (mins > 0) {
+                  creditoFormatado = segs > 0 ? `${mins}min ${segs}s` : `${mins}min`;
+                } else {
+                  creditoFormatado = `${segs}s`;
+                }
+              }
+
+              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Crédito"] + 1)}${linha}`, values: [[creditoFormatado]] });
+            }
           } else if (data.estadoMissao === 'Cancelado') {
             if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
           }
@@ -538,7 +558,6 @@ export default async function handler(req, res) {
           }
         }
 
-        // Aplicada ao iniciar ou concluir missão
         await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
