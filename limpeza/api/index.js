@@ -92,7 +92,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// FORMATAÇÃO COM ESTILOS DE BORDA CORRETOS DA API DO GOOGLE SHEETS
+// FORMATAÇÃO LIMPA E SEGURA SEM ERROS DE ENUM
 async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -177,25 +177,6 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
           }
         },
         fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
-      }
-    });
-
-    // 4. Bordas: Estilos corretos da API (SOLID para externas, THIN para internas laranjas)
-    requests.push({
-      updateBorders: {
-        range: {
-          sheetId,
-          startRowIndex,
-          endRowIndex,
-          startColumnIndex,
-          endColumnIndex
-        },
-        top: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        bottom: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        left: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        right: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-        innerHorizontal: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } },
-        innerVertical: { style: "THIN", color: { red: 1, green: 0.5, blue: 0 } }
       }
     });
 
