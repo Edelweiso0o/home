@@ -222,15 +222,18 @@ export default async function handler(req, res) {
             const segsTrab = String(segsTrabalhoVal % 60).padStart(2, '0');
             const tempoTrabalhadoFormatado = `${horasTrab}:${minsTrab}:${segsTrab}`;
 
-            let updates = [];
-            if (colMap["Hora Saída"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] });
-            if (colMap["Status do Turno"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] });
-            if (colMap["Tempo Trabalhado"] !== undefined) updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
+            let dataUpdates = [];
+            if (colMap["Hora Saída"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] });
+            if (colMap["Status do Turno"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] });
+            if (colMap["Tempo Trabalhado"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
 
-            if (updates.length > 0) {
-              await sheets.spreadsheets.batchUpdate({
+            if (dataUpdates.length > 0) {
+              await sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId,
-                requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+                requestBody: {
+                  valueInputOption: 'USER_ENTERED',
+                  data: dataUpdates
+                }
               });
             }
           }
@@ -289,26 +292,29 @@ export default async function handler(req, res) {
 
         if (missaoAlvo) {
           const linha = missaoAlvo._linha;
-          let updates = [];
+          let dataUpdates = [];
 
           if (data.estadoMissao === 'EmAndamento') {
-            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
+            if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
             if (data.horaExata && colMap["Hora de Início"] !== undefined) {
-              updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaExata]] });
+              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaExata]] });
             }
           } else if (acao === 'concluirMissao') {
-            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
+            if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
             if (data.horaExata && colMap["Hora de Término"] !== undefined) {
-              updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
+              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
             }
           } else if (data.estadoMissao === 'Cancelado') {
-            if (colMap["Status"] !== undefined) updates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
+            if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
           }
 
-          if (updates.length > 0) {
-            await sheets.spreadsheets.batchUpdate({
+          if (dataUpdates.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
               spreadsheetId,
-              requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+              requestBody: {
+                valueInputOption: 'USER_ENTERED',
+                data: dataUpdates
+              }
             });
           }
         }
