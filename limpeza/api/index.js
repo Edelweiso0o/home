@@ -92,6 +92,44 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
+// FUNÇÃO DE TESTE ISOLADA: Pinta estritamente a célula A1 da aba Progresso Diário de Vermelho
+async function testarPintarA1Vermelho(sheets, spreadsheetId) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
+    if (!sheetObj) return;
+    const sheetId = sheetObj.properties.sheetId;
+
+    const requests = [
+      {
+        repeatCell: {
+          range: {
+            sheetId: sheetId,
+            startRowIndex: 0,
+            endRowIndex: 1,
+            startColumnIndex: 0,
+            endColumnIndex: 1
+          },
+          cell: {
+            userEnteredFormat: {
+              backgroundColor: { red: 1, green: 0, blue: 0 }
+            }
+          },
+          fields: "userEnteredFormat.backgroundColor"
+        }
+      }
+    ];
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests }
+    });
+    console.log("Célula A1 pintada de vermelho com sucesso!");
+  } catch (e) {
+    console.error("Erro ao pintar célula A1:", e);
+  }
+}
+
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
     const hojeStr = getDataHojeStr();
@@ -189,6 +227,9 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
+      
+      // Executa o teste de pintar A1 de vermelho a cada GET para tirar a prova real
+      await testarPintarA1Vermelho(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -232,6 +273,11 @@ export default async function handler(req, res) {
       const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const acao = data.acao;
       const hojeStr = getDataHojeStr();
+
+      if (acao === 'testarVermelho') {
+        await testarPintarA1Vermelho(sheets, spreadsheetId);
+        return res.status(200).json({ status: "success", message: "A1 pintada de vermelho!" });
+      }
 
       if (acao === 'baterPonto') {
         const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A1:Z500" });
