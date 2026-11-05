@@ -92,15 +92,15 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// FORMATAÇÃO COMPLETA: Centralizado, Título à esquerda e Borda Laranja
-async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
+// ROTINA ISOLADA: Aplica alinhamento centralizado na tabela, Título à esquerda e borda laranja interna
+async function aplicarAlinhamentoSimples(sheets, spreadsheetId) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
     if (!sheetObj) return;
     const sheetId = sheetObj.properties.sheetId;
 
-    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
     const rows = resVals.data.values || [];
     if (rows.length === 0) return;
 
@@ -114,23 +114,22 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
     let requests = [
-      // 1. Configuração padrão: Fonte Roboto e centralizado para todas as células de dados
+      // 1. Centraliza todas as células de dados
       {
         repeatCell: {
           range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
           cell: {
             userEnteredFormat: {
-              textFormat: { fontFamily: "Roboto", fontSize: 10 },
               horizontalAlignment: "CENTER",
               verticalAlignment: "MIDDLE"
             }
           },
-          fields: "userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
+          fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
         }
       }
     ];
 
-    // 2. Se houver coluna de Título da Missão, alinha especificamente à esquerda
+    // 2. Alinha a coluna de Título da Missão especificamente à esquerda
     const tituloColIdx = colMap["Título da Missão"];
     if (tituloColIdx !== undefined) {
       requests.push({
@@ -146,23 +145,21 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       });
     }
 
-    // 3. Formatação do Cabeçalho (Fundo Escuro, Texto Branco, Centralizado)
+    // 3. Centraliza o Cabeçalho
     requests.push({
       repeatCell: {
         range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
         cell: {
           userEnteredFormat: {
-            backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
-            textFormat: { fontFamily: "Roboto", fontSize: 10, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
             horizontalAlignment: "CENTER",
             verticalAlignment: "MIDDLE"
           }
         },
-        fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
+        fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
       }
     });
 
-    // 4. Bordas: Externa sólida preta e interna fina na cor LARANJA
+    // 4. Bordas: Externa sólida e interna fina laranja
     requests.push({
       updateBorders: {
         range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
@@ -180,7 +177,7 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       requestBody: { requests }
     });
   } catch (e) {
-    console.error("Erro ao aplicar formatação visual:", e);
+    console.error("Erro na rotina de alinhamento:", e);
   }
 }
 
@@ -253,7 +250,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -282,6 +278,9 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
+      
+      // Dispara a rotina isolada de alinhamento e formatação a cada reload (GET)
+      await aplicarAlinhamentoSimples(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -409,7 +408,7 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
+        await aplicarAlinhamentoSimples(sheets, spreadsheetId);
         return res.status(200).json({ status: "success" });
       }
 
@@ -444,7 +443,7 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
+        await aplicarAlinhamentoSimples(sheets, spreadsheetId);
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -491,7 +490,7 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
+        await aplicarAlinhamentoSimples(sheets, spreadsheetId);
         return res.status(200).json({ status: "success" });
       }
 
