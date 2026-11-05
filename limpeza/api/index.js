@@ -92,74 +92,6 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
-  try {
-    const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
-    if (!sheetObj) return;
-    const sheetId = sheetObj.properties.sheetId;
-
-    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
-    const rows = resVals.data.values || [];
-    if (rows.length === 0) return;
-
-    const { headerRowIndex, colMap } = parseSheetRows(rows);
-    const validColIndexes = Object.values(colMap);
-    if (validColIndexes.length === 0 || headerRowIndex === -1) return;
-
-    const startRowIndex = headerRowIndex; 
-    const endRowIndex = rows.length; 
-    const startColumnIndex = Math.min(...validColIndexes);
-    const endColumnIndex = Math.max(...validColIndexes) + 1;
-
-    let requests = [
-      {
-        repeatCell: {
-          range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
-          cell: {
-            userEnteredFormat: {
-              textFormat: { fontFamily: "Roboto", fontSize: 10 },
-              verticalAlignment: "MIDDLE"
-            }
-          },
-          fields: "userEnteredFormat.textFormat,userEnteredFormat.verticalAlignment"
-        }
-      },
-      {
-        repeatCell: {
-          range: { sheetId, startRowIndex: headerRowIndex, endRowIndex: headerRowIndex + 1, startColumnIndex, endColumnIndex },
-          cell: {
-            userEnteredFormat: {
-              backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
-              textFormat: { fontFamily: "Roboto", fontSize: 10, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
-              horizontalAlignment: "CENTER"
-            }
-          },
-          fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment"
-        }
-      },
-      {
-        updateBorders: {
-          range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
-          top: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-          bottom: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-          left: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-          right: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
-          innerHorizontal: { style: "SOLID_THIN", color: { red: 0.85, green: 0.85, blue: 0.85 } },
-          innerVertical: { style: "SOLID_THIN", color: { red: 0.85, green: 0.85, blue: 0.85 } }
-        }
-      }
-    ];
-
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests }
-    });
-  } catch (e) {
-    console.error("Erro ao aplicar formatação visual:", e);
-  }
-}
-
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
     const hojeStr = getDataHojeStr();
@@ -229,7 +161,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -385,7 +316,6 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -420,7 +350,6 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -467,7 +396,6 @@ export default async function handler(req, res) {
           }
         }
 
-        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
