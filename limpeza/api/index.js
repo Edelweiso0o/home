@@ -92,25 +92,68 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
-// Verifica em segundo plano e injeta as missões do dia se ainda não existirem na planilha
+async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
+    if (!sheetObj) return;
+    const sheetId = sheetObj.properties.sheetId;
+
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const rows = resVals.data.values || [];
+    if (rows.length === 0) return;
+
+    const { colMap } = parseSheetRows(rows);
+    const validColIndexes = Object.values(colMap);
+    if (validColIndexes.length === 0) return;
+
+    const startRowIndex = 1; 
+    const endRowIndex = rows.length; 
+    const startColumnIndex = Math.min(...validColIndexes);
+    const endColumnIndex = Math.max(...validColIndexes) + 1;
+
+    let requests = [
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, endRowIndex, startColumnIndex, endColumnIndex },
+          cell: { userEnteredFormat: { textFormat: { fontFamily: "Roboto" } } },
+          fields: "userEnteredFormat.textFormat.fontFamily"
+        }
+      },
+      {
+        updateBorders: {
+          range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
+          top: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          bottom: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          left: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          right: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
+          innerHorizontal: { style: 'THIN', color: { red: 0.8, green: 0.8, blue: 0.8 } },
+          innerVertical: { style: 'THIN', color: { red: 0.8, green: 0.8, blue: 0.8 } }
+        }
+      }
+    ];
+
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  } catch (e) {
+    console.error("Erro ao formatar tabela:", e);
+  }
+}
+
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
     const hojeStr = getDataHojeStr();
     
-    // Busca as missões padrão base
     const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z100" });
     const mParsed = parseSheetRows(missoesRes.data.values || []);
     if (mParsed.dataRows.length === 0) return;
     const mColMap = mParsed.colMap;
 
-    // Busca o progresso diário atual
     const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
     const pRows = progRes.data.values || [];
     const pParsed = parseSheetRows(pRows);
     const pColMap = pParsed.colMap;
     const pData = pParsed.dataRows;
 
-    // Pega todas as missões que já estão cadastradas para hoje na aba Progresso Diário
     const missoesHojeNaPlanilha = pData.filter(row => {
       const dataVal = row[pColMap["Data"]] || "";
       return String(dataVal).trim() === hojeStr;
@@ -126,7 +169,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     let newRows = [];
     let currentId = maxId + 1;
 
-    // Para cada missão base, verifica se já existe uma linha com o mesmo título para a data de hoje
     mParsed.dataRows.forEach(mRow => {
       let titulo = mRow[mColMap["Título da Missão"]] || "";
       let comodo = mRow[mColMap["Cômodo"]] || "";
@@ -159,7 +201,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       }
     });
 
-    // Se houver missões pendentes para hoje que ainda não foram inseridas, adiciona em lote
     if (newRows.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId,
@@ -167,6 +208,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
+      await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
     console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
@@ -194,7 +236,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      // Dispara a checagem e inserção em segundo plano a cada requisição GET (reload/abertura da página)
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
@@ -323,6 +364,7 @@ export default async function handler(req, res) {
           }
         }
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -357,6 +399,7 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArray] }
         });
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoId });
       }
 
@@ -403,6 +446,7 @@ export default async function handler(req, res) {
           }
         }
 
+        await formatarTabelaAPI(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
