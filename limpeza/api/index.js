@@ -76,42 +76,25 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
     if (rows.length < 3) return;
 
     const header = rows[1];
-    let minCol = 0, maxCol = header.length - 1;
     let colMap = {};
     header.forEach((h, i) => { if (h) colMap[h.trim()] = i; });
 
-    const startRowIndex = 2; // Linha 3 (índice 2)
-    const endRowIndex = rows.length; // Até a última linha
+    const startRowIndex = 2; 
+    const endRowIndex = rows.length; 
     const startColumnIndex = Math.min(...Object.values(colMap));
     const endColumnIndex = Math.max(...Object.values(colMap)) + 1;
 
     let requests = [
       {
         repeatCell: {
-          range: {
-            sheetId,
-            startRowIndex: 1, // Cabeçalho + dados
-            endRowIndex,
-            startColumnIndex,
-            endColumnIndex
-          },
-          cell: {
-            userEnteredFormat: {
-              textFormat: { fontFamily: "Roboto" }
-            }
-          },
+          range: { sheetId, startRowIndex: 1, endRowIndex, startColumnIndex, endColumnIndex },
+          cell: { userEnteredFormat: { textFormat: { fontFamily: "Roboto" } } },
           fields: "userEnteredFormat.textFormat.fontFamily"
         }
       },
       {
         updateBorders: {
-          range: {
-            sheetId,
-            startRowIndex,
-            endRowIndex,
-            startColumnIndex,
-            endColumnIndex
-          },
+          range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
           top: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
           bottom: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
           left: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } },
@@ -122,22 +105,13 @@ async function formatarTabelaAPI(sheets, spreadsheetId, sheetName) {
       },
       {
         updateBorders: {
-          range: {
-            sheetId,
-            startRowIndex: 1,
-            endRowIndex: 2,
-            startColumnIndex,
-            endColumnIndex
-          },
+          range: { sheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex, endColumnIndex },
           bottom: { style: 'MEDIUM', color: { red: 0, green: 0, blue: 0 } }
         }
       }
     ];
 
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests }
-    });
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
   } catch (e) {
     console.error("Erro ao formatar tabela:", e);
   }
@@ -194,7 +168,7 @@ async function normalizarEGerarProgressoHoje(sheets, spreadsheetId) {
         rowArray[pColMap["Status"]] = "Pendente";
         rowArray[pColMap["Hora de Início"]] = "";
         rowArray[pColMap["Hora de Término"]] = "";
-        rowArray[pColMap["Créditos"]] = "0s";
+        // NÃO mexe na coluna de Créditos na geração automática
         newRows.push(rowArray);
         currentId++;
       }
@@ -299,7 +273,7 @@ export default async function handler(req, res) {
           rowArray[colMap["Data"]] = hojeStr;
           rowArray[colMap["Hora Entrada"]] = data.horaExata || getHoraAtualStr();
           rowArray[colMap["Hora Saída"]] = "";
-          rowArray[colMap["Duração (Minutos)"]] = "";
+          // Coluna Duração removida/ignorada
           rowArray[colMap["Tempo Trabalhado"]] = "";
           rowArray[colMap["Créditos"]] = "0s";
           rowArray[colMap["Status do Turno"]] = "Em Serviço";
@@ -325,18 +299,51 @@ export default async function handler(req, res) {
 
           if (linhaTurno !== -1) {
             const horaSaidaStr = data.horaExata || getHoraAtualStr();
+            
+            // Calcula tempo trabalhado em segundos
+            const turnoAlvo = dadosPonto.find(t => t._linha === linhaTurno);
+            const horaEntradaStr = turnoAlvo["Hora Entrada"] || "00:00:00";
+            
+            const [he, me, se] = horaEntradaStr.split(':').map(Number);
+            const [hs2, ms2, ss2] = horaSaidaStr.split(':').map(Number);
+            
+            const totalSegsTrabalho = (hs2 * 3600 + ms2 * 60 + (ss2 || 0)) - (he * 3600 + me * 60 + (se || 0));
+            const segsTrabalhoVal = Math.max(0, totalSegsTrabalho);
+            
+            const horasTrab = String(Math.floor(segsTrabalhoVal / 3600)).padStart(2, '0');
+            const minsTrab = String(Math.floor((segsTrabalhoVal % 3600) / 60)).padStart(2, '0');
+            const segsTrab = String(segsTrabalhoVal % 60).padStart(2, '0');
+            const tempoTrabalhadoFormatado = `${horasTrab}:${minsTrab}:${segsTrab}`;
+
+            // Soma o tempo estimado (em minutos) de todas as missões concluídas hoje
+            const progressoDados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
+            let totalMinutosMissoes = 0;
+            progressoDados.forEach(m => {
+              if (m.data === hojeStr && (m.status === "Concluído" || m.Status === "Concluído")) {
+                const est = parseFloat(m.tempoEstimado || m["Tempo Est. (min)"] || 0);
+                if (!isNaN(est)) totalMinutosMissoes += est;
+              }
+            });
+
+            const totalSegsMissoes = totalMinutosMissoes * 60;
+
+            // Créditos do ponto = Tempo Trabalhado - Tempo das Missões (Não pode ser negativo)
+            const creditosPontoSegs = Math.max(0, segsTrabalhoVal - totalSegsMissoes);
+            const minCred = Math.floor(creditosPontoSegs / 60);
+            const segCred = creditosPontoSegs % 60;
+            let creditosPontoFormatado = `${segCred}s`;
+            if (minCred > 0) {
+              const hC = Math.floor(minCred / 60);
+              const mC = minCred % 60;
+              creditosPontoFormatado = hC > 0 ? `${hC}h e ${mC}min` : `${mC}min e ${segCred}s`;
+            }
+
             let updates = [
               { range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] },
-              { range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] }
+              { range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] },
+              { range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] },
+              { range: `Registro de Ponto!${columnToLetter(colMap["Créditos"] + 1)}${linhaTurno}`, values: [[creditosPontoFormatado]] }
             ];
-
-            if (data.duracaoSegundos) {
-              const minTotais = Math.round(data.duracaoSegundos / 60);
-              const h = String(Math.floor(minTotais / 60)).padStart(2, '0');
-              const m = String(minTotais % 60).padStart(2, '0');
-              updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Duração (Minutos)"] + 1)}${linhaTurno}`, values: [[minTotais]] });
-              updates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[`${h}:${m}:00`]] });
-            }
 
             await sheets.spreadsheets.batchUpdate({
               spreadsheetId,
@@ -374,7 +381,7 @@ export default async function handler(req, res) {
         rowArray[colMap["Status"]] = "Pendente";
         rowArray[colMap["Hora de Início"]] = "";
         rowArray[colMap["Hora de Término"]] = "";
-        rowArray[colMap["Créditos"]] = "0s";
+        // Coluna créditos vazia na adição
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -416,6 +423,7 @@ export default async function handler(req, res) {
             let tempoReal = data.tempoRealMin !== undefined ? parseFloat(data.tempoRealMin) : NaN;
             if (isNaN(tempoReal)) tempoReal = tempoEst;
 
+            // Créditos da missão = Tempo Estimado - Tempo Real (Garante que não fica negativo)
             const creditosMin = Math.max(0, tempoEst - tempoReal);
             let creditosFormatados = "0s";
             if (creditosMin > 0) {
