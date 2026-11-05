@@ -220,6 +220,7 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                         mServidor.estadoMissao = 'EmAndamento';
                         mServidor.status = 'Em Andamento';
                         mServidor.tempoInicioMs = mLocal.tempoInicioMs;
+                        if (mLocal.horaInicioStr) mServidor.horaInicioStr = mLocal.horaInicioStr;
                     }
                     if (mLocal && mLocal.status === 'Cancelado') {
                         mServidor.status = 'Cancelado';
@@ -392,6 +393,7 @@ async function cadastrarMissao(event) {
         status: 'Pendente',
         estadoMissao: 'Pendente',
         tempoInicioMs: null,
+        horaInicioStr: null,
         missaoUnica: missaoUnica
     };
 
@@ -434,7 +436,7 @@ function abrirModalDuplicarRapido() {
             <div onclick="duplicarMissaoPorTitulo('${m.titulo}')" class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl hover:border-purple-500 cursor-pointer transition flex justify-between items-center">
                 <div>
                     <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
-                    <p class="text-[10px] text-purple-300/60">${m.comodo} • Est: ${m.tempoEstimado} min</p>
+                    <p class="text-[10px] text-purple-300/60">${m.comodo} • tempo missão: ${m.tempoEstimado} min</p>
                 </div>
                 <span class="text-xs bg-purple-600/20 text-purple-300 px-2.5 py-1 rounded-lg font-mono-code"><i class="fa-solid fa-plus mr-1"></i> Repetir</span>
             </div>
@@ -472,6 +474,7 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
         status: 'Pendente',
         estadoMissao: 'Pendente',
         tempoInicioMs: null,
+        horaInicioStr: null,
         missaoUnica: true
     };
 
@@ -584,6 +587,7 @@ function iniciarMissao(id) {
         missao.estadoMissao = 'EmAndamento';
         missao.status = 'Em Andamento';
         missao.tempoInicioMs = dataAtual.getTime();
+        missao.horaInicioStr = String(dataAtual.getHours()).padStart(2, '0') + ":" + String(dataAtual.getMinutes()).padStart(2, '0');
         
         salvarDadosLocalStorage();
         renderizarVisaoAtual();
@@ -715,6 +719,24 @@ function renderizarMissoes() {
         let statusBadge = '';
         let emAndamento = m.estadoMissao === 'EmAndamento' || m.status === 'Em Andamento';
 
+        let infoDinamicaInicioEPrevisao = '';
+        if (emAndamento && m.tempoInicioMs) {
+            let dataInicio = new Date(m.tempoInicioMs);
+            let horaInicioFmt = m.horaInicioStr || (String(dataInicio.getHours()).padStart(2, '0') + ":" + String(dataInicio.getMinutes()).padStart(2, '0'));
+            
+            let dataTerminoPrev = new Date(m.tempoInicioMs + (m.tempoEstimado * 60000));
+            let previsaoFmt = String(dataTerminoPrev.getHours()).padStart(2, '0') + ":" + String(dataTerminoPrev.getMinutes()).padStart(2, '0');
+
+            infoDinamicaInicioEPrevisao = `
+                <span class="bg-[#090614] text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">
+                    Início: ${horaInicioFmt}
+                </span>
+                <span class="bg-[#090614] text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
+                    Previsão Término: ${previsaoFmt}
+                </span>
+            `;
+        }
+
         if (!emAndamento) {
             statusBadge = '<span class="text-[9px] bg-purple-500/10 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded font-mono-code">PENDENTE</span>';
             botoesAcao = `
@@ -758,12 +780,16 @@ function renderizarMissoes() {
                             ${statusBadge}
                             ${m.missaoUnica ? '<span class="text-[9px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded font-mono-code">ÚNICA</span>' : ''}
                         </div>
-                        <p class="text-xs text-purple-300/70 mt-0.5">${m.comodo} • Est: ${m.tempoEstimado} min • ID: ${m.id}</p>
+                        <p class="text-xs text-purple-300/70 mt-0.5">${m.comodo} • ID: ${m.id}</p>
                         
-                        <div class="flex items-center space-x-2 mt-2 font-mono-code text-[10px]">
+                        <div class="flex flex-wrap items-center gap-1.5 mt-2 font-mono-code text-[10px]">
                             <span class="bg-[#090614] text-purple-300 px-2 py-0.5 rounded border border-purple-900/60">
                                 Prioridade: ${m.prioridade}
                             </span>
+                            <span class="bg-[#090614] text-purple-200 px-2 py-0.5 rounded border border-purple-900/60">
+                                tempo missão: ${m.tempoEstimado} min
+                            </span>
+                            ${infoDinamicaInicioEPrevisao}
                             <span id="aviso-atraso-${m.id}" class="hidden bg-red-950/40 text-red-400 px-2 py-0.5 rounded border border-red-900/60 animate-pulse font-bold">
                                 ⚠️ ATRASADO
                             </span>
@@ -829,7 +855,7 @@ function renderizarHistoricoGeral() {
                             <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
                             <span class="text-[9px] ${corStatus} border px-1.5 py-0.5 rounded font-mono-code">${m.status || 'Pendente'}</span>
                         </div>
-                        <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • Est: ${m.tempoEstimado} min</p>
+                        <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • tempo missão: ${m.tempoEstimado} min</p>
                     </div>
                 </div>
                 <span class="text-[10px] font-mono-code text-purple-300/40">ID: ${m.id}</span>
@@ -878,7 +904,7 @@ function abrirDetalhesComodo(comodo, statusFiltro = 'Concluído') {
                         <span class="text-xs font-bold text-white">${m.titulo}</span>
                         <span class="text-[10px] font-mono-code ${badgeBg} px-2 py-0.5 rounded border">${m.status || 'Pendente'}</span>
                     </div>
-                    <p class="text-[11px] text-purple-300/70 font-mono-code">Est: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
+                    <p class="text-[11px] text-purple-300/70 font-mono-code">tempo missão: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
                 </div>
             `;
         }).join('');
