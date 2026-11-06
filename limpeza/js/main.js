@@ -216,7 +216,6 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
 
             if (data.turnos && data.turnos.length > 0) {
                 turnosRegistrados = data.turnos;
-                // Procura o último turno registrado para exibir caso esteja de folga
                 const ultimoTurno = data.turnos[data.turnos.length - 1];
                 if (ultimoTurno && ultimoTurno["Tempo Trabalhado"]) {
                     estadoPonto.ultimoTempoTrabalhadoFormatado = ultimoTurno["Tempo Trabalhado"];
@@ -274,7 +273,6 @@ async function sincronizarComServidor(acao, payload) {
 }
 
 async function alternarPonto() {
-    // Validação: Não permitir encerrar o ponto se houver alguma missão "Em Andamento"
     if (estadoPonto.trabalhando) {
         const missaoEmAndamento = missoes.find(m => m.estadoMissao === 'EmAndamento' || m.status === 'Em Andamento');
         if (missaoEmAndamento) {
@@ -329,7 +327,6 @@ function atualizarDisplaysPonto() {
         if (elTimerTurno) elTimerTurno.innerText = `${hTurno}:${mTurno}:${sTurno}`;
         if (elLabelTitulo) elLabelTitulo.innerText = "Tempo em Turno";
     } else {
-        // Quando estiver de folga, exibe o último tempo trabalhado no turno
         if (elTimerTurno) elTimerTurno.innerText = estadoPonto.ultimoTempoTrabalhadoFormatado || "00:00:00";
         if (elLabelTitulo) elLabelTitulo.innerText = "Último Turno";
     }
@@ -637,6 +634,12 @@ function concluirMissao(id) {
     const dataAtual = new Date();
     const horaTerminoExata = String(dataAtual.getHours()).padStart(2, '0') + ":" + String(dataAtual.getMinutes()).padStart(2, '0') + ":" + String(dataAtual.getSeconds()).padStart(2, '0');
 
+    let horaInicioExata = missao.horaInicioStr || "";
+    if (missao.tempoInicioMs) {
+        const dInicio = new Date(missao.tempoInicioMs);
+        horaInicioExata = String(dInicio.getHours()).padStart(2, '0') + ":" + String(dInicio.getMinutes()).padStart(2, '0') + ":" + String(dInicio.getSeconds()).padStart(2, '0');
+    }
+
     if (missao.tempoInicioMs) {
         const diffMin = Math.round((dataAtual.getTime() - missao.tempoInicioMs) / 60000);
         missao.tempoRealMin = diffMin > 0 ? diffMin : 1;
@@ -654,9 +657,11 @@ function concluirMissao(id) {
     mostrarNotificacao("Missão Concluída!", "Tarefa finalizada com sucesso.", "sucesso", 2500);
 
     sincronizarComServidor('concluirMissao', { 
-        id: missao.id, 
+        id: missao.id,
+        titulo: missao.titulo,
+        horaInicio: horaInicioExata,
         horaExata: horaTerminoExata,
-        tempoRealMin: missao.tempoRealMin 
+        tempoEst: missao.tempoEstimado
     });
 }
 
