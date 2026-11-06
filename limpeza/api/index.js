@@ -46,7 +46,7 @@ function parseSheetRows(rows) {
       if (cell) {
         const val = String(cell).trim();
         tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada'].includes(val)) {
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Crédito', 'Tempo Est. (min)'].includes(val)) {
           matches++;
         }
       }
@@ -176,7 +176,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 3. Bordas Externas da Tabela Inteira (Preto Médio)
+    // 1. Borda Externa Média na Cor Preta
     requests.push({
       updateBorders: {
         range: {
@@ -193,7 +193,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 4. Bordas Internas do Body da Tabela (Laranja)
+    // 2. Bordas Internas do Corpo da Tabela em Laranja
     if (endRowIndex > startRowIndex + 1) {
       requests.push({
         updateBorders: {
@@ -204,17 +204,13 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
             startColumnIndex,
             endColumnIndex
           },
-          top:    { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
-          bottom: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
-          left:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
-          right:  { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
           innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
           innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
         }
       });
     }
 
-    // 5. Bordas do Cabeçalho (Preto)
+    // 3. Bordas do Cabeçalho (Preto)
     requests.push({
       updateBorders: {
         range: {
@@ -224,12 +220,8 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
           startColumnIndex,
           endColumnIndex
         },
-        top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        innerHorizontal: { style: "NONE" },
-        innerVertical:   { style: "SOLID", color: { red: 0, green: 0, blue: 0 } }
+        innerVertical: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } }
       }
     });
 
@@ -535,6 +527,72 @@ export default async function handler(req, res) {
         return res.status(200).json({ status: "success", id: novoIdProg });
       }
 
+      if (acao === 'editarMissao') {
+        const tituloBusca = String(data.tituloOriginal || data.titulo).trim().toLowerCase();
+
+        // 1. Atualizar na aba "Missões"
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+        const mParsed = parseSheetRows(missoesRes.data.values || []);
+        const mColMap = mParsed.colMap;
+        const mDataRows = mParsed.dataRows;
+
+        let mLinhaAlvo = -1;
+        mDataRows.forEach((row, idx) => {
+          const tVal = String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase();
+          if (tVal === tituloBusca) {
+            mLinhaAlvo = idx + (missoesRes.data.values.length - mDataRows.length + 1);
+          }
+        });
+
+        if (mLinhaAlvo !== -1) {
+          let mUpdates = [];
+          if (data.titulo && mColMap["Título da Missão"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Título da Missão"] + 1)}${mLinhaAlvo}`, values: [[data.titulo]] });
+          if (data.comodo && mColMap["Cômodo"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Cômodo"] + 1)}${mLinhaAlvo}`, values: [[data.comodo]] });
+          if (data.tempoEstimado !== undefined && mColMap["Tempo Est. (min)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Tempo Est. (min)"] + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
+          if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
+
+          if (mUpdates.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: mUpdates }
+            });
+          }
+          formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
+        }
+
+        // 2. Atualizar na aba "Progresso Diário"
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const pColMap = pParsed.colMap;
+        const pDataRows = pParsed.dataRows;
+
+        let pLinhaAlvo = -1;
+        pDataRows.forEach((row, idx) => {
+          const tVal = String(row[pColMap["Título da Missão"]] || "").trim().toLowerCase();
+          if (tVal === tituloBusca) {
+            pLinhaAlvo = idx + (progRes.data.values.length - pDataRows.length + 1);
+          }
+        });
+
+        if (pLinhaAlvo !== -1) {
+          let pUpdates = [];
+          if (data.titulo && pColMap["Título da Missão"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Título da Missão"] + 1)}${pLinhaAlvo}`, values: [[data.titulo]] });
+          if (data.comodo && pColMap["Cômodo"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Cômodo"] + 1)}${pLinhaAlvo}`, values: [[data.comodo]] });
+          if (data.tempoEstimado !== undefined && pColMap["Tempo Est. (min)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Tempo Est. (min)"] + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
+          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
+
+          if (pUpdates.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: pUpdates }
+            });
+          }
+          formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
+        }
+
+        return res.status(200).json({ status: "success" });
+      }
+
       if (acao === 'atualizarEstadoMissao' || acao === 'concluirMissao') {
         const dados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
@@ -564,6 +622,10 @@ export default async function handler(req, res) {
             const horaTerminoStr = data.horaExata || getHoraAtualStr();
             if (colMap["Hora de Término"] !== undefined) {
               dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[horaTerminoStr]] });
+            }
+
+            if (colMap["Hora de Início"] !== undefined && data.horaInicio && !missaoAlvo["Hora de Início"]) {
+              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaInicio]] });
             }
 
             if (colMap["Crédito"] !== undefined) {
