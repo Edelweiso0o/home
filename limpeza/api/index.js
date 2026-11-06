@@ -199,7 +199,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
         range: {
           sheetId,
           startRowIndex,
-          endRowIndex: startRowIndex + 1,
+          endRowIndex,
           startColumnIndex,
           endColumnIndex
         },
@@ -452,7 +452,6 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'adicionarMissao') {
-        // 1. Cadastra primeiro na aba "Missões"
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
@@ -481,7 +480,6 @@ export default async function handler(req, res) {
         });
         formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
 
-        // 2. Passa para a aba "Progresso Diário"
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
@@ -541,26 +539,41 @@ export default async function handler(req, res) {
             }
           } else if (acao === 'concluirMissao') {
             if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
-            if (data.horaExata && colMap["Hora de Término"] !== undefined) {
-              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[data.horaExata]] });
+            const horaTerminoStr = data.horaExata || getHoraAtualStr();
+            if (colMap["Hora de Término"] !== undefined) {
+              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[horaTerminoStr]] });
             }
 
             if (colMap["Crédito"] !== undefined) {
               const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || missaoAlvo.tempoEstimado) || 0;
-              const tempoRealMin = data.tempoRealMin !== undefined ? data.tempoRealMin : tempoEstMin;
-              const diffSegs = (tempoEstMin * 60) - (tempoRealMin * 60);
+              const horaInicioStr = missaoAlvo["Hora de Início"] || "";
 
-              let creditoFormatado = "";
-              if (diffSegs < 0) {
-                creditoFormatado = `${diffSegs}s`;
-              } else {
+              let diffSegs = 0;
+              if (horaInicioStr) {
+                const [hi, mi, si] = horaInicioStr.split(':').map(Number);
+                const [ht, mt, st] = horaTerminoStr.split(':').map(Number);
+
+                const totalSegsInicio = (hi || 0) * 3600 + (mi || 0) * 60 + (si || 0);
+                const totalSegsTermino = (ht || 0) * 3600 + (mt || 0) * 60 + (st || 0);
+                const tempoGastoSegs = totalSegsTermino - totalSegsInicio;
+
+                const tempoEstSegs = tempoEstMin * 60;
+                diffSegs = tempoEstSegs - tempoGastoSegs;
+              }
+
+              let creditoFormatado = "0s";
+              if (diffSegs > 0) {
                 const mins = Math.floor(diffSegs / 60);
                 const segs = diffSegs % 60;
-                if (mins > 0) {
-                  creditoFormatado = segs > 0 ? `${mins}min ${segs}s` : `${mins}min`;
+                if (mins > 0 && segs > 0) {
+                  creditoFormatado = `${mins}min e ${segs}s`;
+                } else if (mins > 0) {
+                  creditoFormatado = `${mins}min`;
                 } else {
                   creditoFormatado = `${segs}s`;
                 }
+              } else {
+                creditoFormatado = "0s";
               }
 
               dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Crédito"] + 1)}${linha}`, values: [[creditoFormatado]] });
