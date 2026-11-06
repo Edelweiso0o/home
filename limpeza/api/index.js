@@ -46,7 +46,7 @@ function parseSheetRows(rows) {
       if (cell) {
         const val = String(cell).trim();
         tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Crédito', 'Tempo Est. (min)'].includes(val)) {
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Créditos', 'Crédito', 'Tempo Est. (min)'].includes(val)) {
           matches++;
         }
       }
@@ -628,7 +628,7 @@ export default async function handler(req, res) {
               dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaInicio]] });
             }
 
-            if (colMap["Crédito"] !== undefined) {
+            if (colMap["Créditos"] !== undefined) {
               const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || data.tempoEst || missaoAlvo.tempoEstimado) || 0;
               const horaInicioStr = missaoAlvo["Hora de Início"] || data.horaInicio || "";
 
@@ -642,17 +642,15 @@ export default async function handler(req, res) {
                 const tempoGastoSegs = totalSegsTermino - totalSegsInicio;
 
                 const tempoEstSegs = tempoEstMin * 60;
-                diffSegs = tempoEstSegs - tempoGastoSegs;
+                diffSegs = Math.round(tempoEstSegs - tempoGastoSegs);
               }
 
               let creditoFormatado = "0s";
               if (diffSegs > 0) {
                 const mins = Math.floor(diffSegs / 60);
                 const segs = diffSegs % 60;
-                if (mins > 0 && segs > 0) {
+                if (mins > 0) {
                   creditoFormatado = `${mins}min e ${segs}s`;
-                } else if (mins > 0) {
-                  creditoFormatado = `${mins}min`;
                 } else {
                   creditoFormatado = `${segs}s`;
                 }
@@ -660,7 +658,7 @@ export default async function handler(req, res) {
                 creditoFormatado = "0s";
               }
 
-              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Crédito"] + 1)}${linha}`, values: [[creditoFormatado]] });
+              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Créditos"] + 1)}${linha}`, values: [[creditoFormatado]] });
             }
           } else if (data.estadoMissao === 'Cancelado') {
             if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
@@ -670,7 +668,7 @@ export default async function handler(req, res) {
             await sheets.spreadsheets.values.batchUpdate({
               spreadsheetId,
               requestBody: {
-                valueInputOption: 'USER_ENTERED',
+                valueInputOption: 'RAW',
                 data: dataUpdates
               }
             });
