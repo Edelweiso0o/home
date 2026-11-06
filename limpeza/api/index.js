@@ -176,6 +176,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
+    // 3. Bordas Externas da Tabela Inteira (Preto Médio)
     requests.push({
       updateBorders: {
         range: {
@@ -188,18 +189,38 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
         top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
-        innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
+        right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } }
       }
     });
 
+    // 4. Bordas Internas do Body da Tabela (Laranja)
+    if (endRowIndex > startRowIndex + 1) {
+      requests.push({
+        updateBorders: {
+          range: {
+            sheetId,
+            startRowIndex: startRowIndex + 1,
+            endRowIndex,
+            startColumnIndex,
+            endColumnIndex
+          },
+          top:    { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+          bottom: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+          left:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+          right:  { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+          innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
+          innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
+        }
+      });
+    }
+
+    // 5. Bordas do Cabeçalho (Preto)
     requests.push({
       updateBorders: {
         range: {
           sheetId,
           startRowIndex,
-          endRowIndex,
+          endRowIndex: startRowIndex + 1,
           startColumnIndex,
           endColumnIndex
         },
@@ -207,7 +228,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
         bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        innerHorizontal: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } },
+        innerHorizontal: { style: "NONE" },
         innerVertical:   { style: "SOLID", color: { red: 0, green: 0, blue: 0 } }
       }
     });
@@ -524,7 +545,7 @@ export default async function handler(req, res) {
         if (data.titulo) {
           missaoAlvo = dados.slice().reverse().find(m => String(m.titulo).trim().toLowerCase() === String(data.titulo).trim().toLowerCase() && (m.data === hojeStr || !m.data));
         }
-        if (!missaoAlvo) {
+        if (!missaoAlvo && data.id) {
           missaoAlvo = dados.find(m => String(m.id) === String(data.id));
         }
 
@@ -539,17 +560,18 @@ export default async function handler(req, res) {
             }
           } else if (acao === 'concluirMissao') {
             if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
+            
             const horaTerminoStr = data.horaExata || getHoraAtualStr();
             if (colMap["Hora de Término"] !== undefined) {
               dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[horaTerminoStr]] });
             }
 
             if (colMap["Crédito"] !== undefined) {
-              const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || missaoAlvo.tempoEstimado) || 0;
-              const horaInicioStr = missaoAlvo["Hora de Início"] || "";
+              const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || data.tempoEst || missaoAlvo.tempoEstimado) || 0;
+              const horaInicioStr = missaoAlvo["Hora de Início"] || data.horaInicio || "";
 
               let diffSegs = 0;
-              if (horaInicioStr) {
+              if (horaInicioStr && horaTerminoStr) {
                 const [hi, mi, si] = horaInicioStr.split(':').map(Number);
                 const [ht, mt, st] = horaTerminoStr.split(':').map(Number);
 
