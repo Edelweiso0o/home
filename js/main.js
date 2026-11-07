@@ -4,7 +4,8 @@ let estadoPonto = {
     trabalhando: false,
     inicioTurnoMs: null,
     segundosTurnoAtual: 0,
-    totalSegundosTrabalhados: 0
+    totalSegundosTrabalhados: 0,
+    ultimoTempoTrabalhadoFormatado: "00:00:00"
 };
 
 let missoes = [];
@@ -213,23 +214,43 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                 }
             }
 
-            if (data.missoes && data.missoes.length > 0) {
-                data.missoes.forEach(mServidor => {
-                    let mLocal = missoes.find(x => String(x.id) === String(mServidor.id) && String(x.data || '') === String(mServidor.data || ''));
-                    if (mLocal && (mLocal.estadoMissao === 'EmAndamento' || mLocal.status === 'Em Andamento')) {
-                        mServidor.estadoMissao = 'EmAndamento';
-                        mServidor.status = 'Em Andamento';
-                        mServidor.tempoInicioMs = mLocal.tempoInicioMs;
-                        if (mLocal.horaInicioStr) mServidor.horaInicioStr = mLocal.horaInicioStr;
-                    }
-                    if (mLocal && mLocal.status === 'Cancelado') {
-                        mServidor.status = 'Cancelado';
-                        mServidor.estadoMissao = 'Cancelado';
-                    }
-                });
-                missoes = data.missoes;
+            if (data.turnos && data.turnos.length > 0) {
+                turnosRegistrados = data.turnos;
+                const ultimoTurno = data.turnos[data.turnos.length - 1];
+                if (ultimoTurno && ultimoTurno["Tempo Trabalhado"]) {
+                    estadoPonto.ultimoTempoTrabalhadoFormatado = ultimoTurno["Tempo Trabalhado"];
+                }
             }
-            if (data.turnos) turnosRegistrados = data.turnos;
+
+            // PLANILHA É A FONTE DA VERDADE: Substitui e mapeia o estado vindo direto do servidor
+            if (data.missoes && data.missoes.length > 0) {
+                const hojeStr = obterDataHojeStr();
+                missoes = data.missoes.map(mServidor => {
+                    let statusServidor = (mServidor["Status"] || mServidor.status || "Pendente").trim();
+                    
+                    let estadoObj = {
+                        ...mServidor,
+                        status: statusServidor,
+                        estadoMissao: statusServidor === "Concluído" ? "Concluído" : (statusServidor === "Cancelado" ? "Cancelado" : (statusServidor === "Em Andamento" ? "EmAndamento" : "Pendente"))
+                    };
+
+                    // Se na planilha já consta como concluída ou cancelada, limpa travas locais de andamento
+                    if (estadoObj.status === 'Concluído' || estadoObj.status === 'Cancelado') {
+                        estadoObj.tempoInicioMs = null;
+                        estadoObj.horaInicioStr = null;
+                    } else {
+                        // Mantém estado local se ainda estiver em andamento e coerente
+                        let mLocal = missoes.find(x => String(x.id) === String(mServidor.id));
+                        if (mLocal && (mLocal.estadoMissao === 'EmAndamento' || statusServidor === 'Em Andamento')) {
+                            estadoObj.estadoMissao = 'EmAndamento';
+                            estadoObj.status = 'Em Andamento';
+                            estadoObj.tempoInicioMs = mLocal.tempoInicioMs;
+                            if (mLocal.horaInicioStr) estadoObj.horaInicioStr = mLocal.horaInicioStr;
+                        }
+                    }
+                    return estadoObj;
+                });
+            }
             if (data.estatisticas) contadorConcluidas = data.estatisticas.concluidas || 0;
         }
 
@@ -244,10 +265,7 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
     renderizarVisaoAtual();
 }
 
-async function sincronizarComServidor(acao, payload) {
-    const inicioMs = performance.now();
-    mostrarLoader(true);
-
+async function sincronizarComServidorEmSegundoPlano(acao, payload) {
     try {
         const response = await fetch(API_URL, {
             method: "POST",
@@ -255,16 +273,27 @@ async function sincronizarComServidor(acao, payload) {
             body: JSON.stringify({ acao, ...payload })
         });
         const resJson = await response.json();
-        mostrarLoader(false, performance.now() - inicioMs);
+        
+        // Assim que enviar para a planilha com sucesso, limpa dados temporários enviados se necessário e atualiza do servidor silenciosamente
+        if (resJson && resJson.status === 'success') {
+            carregarDadosDoServidor(false);
+        }
         return resJson;
     } catch (error) {
         console.error("Erro background sync:", error);
-        mostrarLoader(false, performance.now() - inicioMs);
         return { status: "error" };
     }
 }
 
 async function alternarPonto() {
+    if (estadoPonto.trabalhando) {
+        const missaoEmAndamento = missoes.find(m => m.estadoMissao === 'EmAndamento' || m.status === 'Em Andamento');
+        if (missaoEmAndamento) {
+            mostrarNotificacao("Ação Bloqueada", `Conclua a missão "${missaoEmAndamento.titulo}" antes de encerrar o turno!`, "aviso", 4000);
+            return;
+        }
+    }
+
     const proximoStatus = !estadoPonto.trabalhando;
     
     if (proximoStatus) {
@@ -281,7 +310,7 @@ async function alternarPonto() {
         atualizarDisplaysPonto();
         mostrarNotificacao("Ponto Registrado", "Turno iniciado instantaneamente!", "sucesso", 2000);
 
-        sincronizarComServidor('baterPonto', { status: 'ENTRADA', horaExata: horaEntradaStr });
+        sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'ENTRADA', horaExata: horaEntradaStr });
     } else {
         const duracaoSegs = estadoPonto.segundosTurnoAtual;
         
@@ -295,17 +324,25 @@ async function alternarPonto() {
         atualizarDisplaysPonto();
         mostrarNotificacao("Turno Encerrado", "Você entrou em folga.", "atencao", 2000);
 
-        sincronizarComServidor('baterPonto', { status: 'SAIDA', duracaoSegundos: duracaoSegs });
+        sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'SAIDA', duracaoSegundos: duracaoSegs });
     }
     salvarDadosLocalStorage();
 }
 
 function atualizarDisplaysPonto() {
-    const hTurno = String(Math.floor(estadoPonto.segundosTurnoAtual / 3600)).padStart(2, '0');
-    const mTurno = String(Math.floor((estadoPonto.segundosTurnoAtual % 3600) / 60)).padStart(2, '0');
-    const sTurno = String(estadoPonto.segundosTurnoAtual % 60).padStart(2, '0');
     const elTimerTurno = document.getElementById('timerTurnoActual');
-    if (elTimerTurno) elTimerTurno.innerText = `${hTurno}:${mTurno}:${sTurno}`;
+    const elLabelTitulo = document.getElementById('labelTurnoTitulo');
+
+    if (estadoPonto.trabalhando) {
+        const hTurno = String(Math.floor(estadoPonto.segundosTurnoAtual / 3600)).padStart(2, '0');
+        const mTurno = String(Math.floor((estadoPonto.segundosTurnoAtual % 3600) / 60)).padStart(2, '0');
+        const sTurno = String(estadoPonto.segundosTurnoAtual % 60).padStart(2, '0');
+        if (elTimerTurno) elTimerTurno.innerText = `${hTurno}:${mTurno}:${sTurno}`;
+        if (elLabelTitulo) elLabelTitulo.innerText = "Tempo em Turno";
+    } else {
+        if (elTimerTurno) elTimerTurno.innerText = estadoPonto.ultimoTempoTrabalhadoFormatado || "00:00:00";
+        if (elLabelTitulo) elLabelTitulo.innerText = "Último Turno";
+    }
 
     const badge = document.getElementById('badgePontoStatus');
     const textStatus = document.getElementById('textPontoStatus');
@@ -405,14 +442,16 @@ async function cadastrarMissao(event) {
     if (missaoUnicaEl) missaoUnicaEl.checked = false;
     fecharModalNovaMissao();
     carregarUltimasPreferenciasSelects();
-    mostrarNotificacao("Sucesso", "Missão adicionada à fila.", "sucesso", 2000);
+    mostrarNotificacao("Sucesso", "Missão adicionada instantaneamente.", "sucesso", 2000);
 
-    const resposta = await sincronizarComServidor('adicionarMissao', novaMissao);
-    if (resposta && resposta.status === 'success' && resposta.id) {
-        novaMissao.id = resposta.id;
-        salvarDadosLocalStorage();
-        renderizarVisaoAtual();
-    }
+    // Envio em segundo plano sem travar o site
+    sincronizarComServidorEmSegundoPlano('adicionarMissao', novaMissao).then(resposta => {
+        if (resposta && resposta.status === 'success' && resposta.id) {
+            novaMissao.id = resposta.id;
+            salvarDadosLocalStorage();
+            renderizarVisaoAtual();
+        }
+    });
 }
 
 function abrirModalDuplicarRapido() {
@@ -483,12 +522,13 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
     renderizarVisaoAtual();
     mostrarNotificacao("Sucesso", `Missão repetida: ${tituloNovo}`, "sucesso", 2000);
 
-    const resposta = await sincronizarComServidor('adicionarMissao', novaMissaoDuplicada);
-    if (resposta && resposta.status === 'success' && resposta.id) {
-        novaMissaoDuplicada.id = resposta.id;
-        salvarDadosLocalStorage();
-        renderizarVisaoAtual();
-    }
+    sincronizarComServidorEmSegundoPlano('adicionarMissao', novaMissaoDuplicada).then(resposta => {
+        if (resposta && resposta.status === 'success' && resposta.id) {
+            novaMissaoDuplicada.id = resposta.id;
+            salvarDadosLocalStorage();
+            renderizarVisaoAtual();
+        }
+    });
 }
 
 function carregarUltimasPreferenciasSelects() {
@@ -563,7 +603,7 @@ async function salvarEdicaoMissao(event) {
     renderizarVisaoAtual();
     fecharModalEdicao();
 
-    sincronizarComServidor('editarMissao', {
+    sincronizarComServidorEmSegundoPlano('editarMissao', {
         id: missao.id,
         tituloOriginal: tituloOriginal,
         titulo: tituloNovo,
@@ -594,7 +634,7 @@ function iniciarMissao(id) {
         
         mostrarNotificacao("Missão Iniciada", `Cronômetro rodando para: ${missao.titulo}`, "sucesso", 2000);
 
-        sincronizarComServidor('atualizarEstadoMissao', { id: missao.id, estadoMissao: 'EmAndamento', horaExata: horaInicioExata });
+        sincronizarComServidorEmSegundoPlano('atualizarEstadoMissao', { id: missao.id, estadoMissao: 'EmAndamento', horaExata: horaInicioExata });
     }
 }
 
@@ -610,6 +650,12 @@ function concluirMissao(id) {
     const dataAtual = new Date();
     const horaTerminoExata = String(dataAtual.getHours()).padStart(2, '0') + ":" + String(dataAtual.getMinutes()).padStart(2, '0') + ":" + String(dataAtual.getSeconds()).padStart(2, '0');
 
+    let horaInicioExata = missao.horaInicioStr || "";
+    if (missao.tempoInicioMs) {
+        const dInicio = new Date(missao.tempoInicioMs);
+        horaInicioExata = String(dInicio.getHours()).padStart(2, '0') + ":" + String(dInicio.getMinutes()).padStart(2, '0') + ":" + String(dInicio.getSeconds()).padStart(2, '0');
+    }
+
     if (missao.tempoInicioMs) {
         const diffMin = Math.round((dataAtual.getTime() - missao.tempoInicioMs) / 60000);
         missao.tempoRealMin = diffMin > 0 ? diffMin : 1;
@@ -619,6 +665,8 @@ function concluirMissao(id) {
 
     missao.status = 'Concluído';
     missao.estadoMissao = 'Concluído';
+    missao.tempoInicioMs = null;
+    missao.horaInicioStr = null;
     contadorConcluidas++;
 
     salvarDadosLocalStorage();
@@ -626,10 +674,12 @@ function concluirMissao(id) {
     
     mostrarNotificacao("Missão Concluída!", "Tarefa finalizada com sucesso.", "sucesso", 2500);
 
-    sincronizarComServidor('concluirMissao', { 
-        id: missao.id, 
+    sincronizarComServidorEmSegundoPlano('concluirMissao', { 
+        id: missao.id,
+        titulo: missao.titulo,
+        horaInicio: horaInicioExata,
         horaExata: horaTerminoExata,
-        tempoRealMin: missao.tempoRealMin 
+        tempoEst: missao.tempoEstimado
     });
 }
 
@@ -638,12 +688,14 @@ function alternarNaoFazerHoje(id) {
     if (missao) {
         missao.status = 'Cancelado';
         missao.estadoMissao = 'Cancelado';
+        missao.tempoInicioMs = null;
+        missao.horaInicioStr = null;
         
         salvarDadosLocalStorage();
         renderizarVisaoAtual();
         mostrarNotificacao("Cancelado", "Missão cancelada para hoje.", "atencao", 2000);
 
-        sincronizarComServidor('atualizarEstadoMissao', { id: missao.id, estadoMissao: 'Cancelado' });
+        sincronizarComServidorEmSegundoPlano('atualizarEstadoMissao', { id: missao.id, estadoMissao: 'Cancelado' });
     }
 }
 
@@ -653,7 +705,7 @@ function excluirMissao(id) {
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
     mostrarNotificacao("Excluído", "Missão removida.", "atencao", 2000);
-    sincronizarComServidor('excluirMissao', { id });
+    sincronizarComServidorEmSegundoPlano('excluirMissao', { id });
 }
 
 function getIconeComodo(comodo) {
@@ -689,7 +741,9 @@ function renderizarMissoes() {
 
     const missoesAtivas = missoes.filter(m => {
         if (m.data && m.data !== hojeStr) return false;
-        if (m.status === 'Concluído' || m.status === 'Cancelado') return false;
+        // Prioridade na leitura do status vindo da planilha
+        const stAtual = (m.status || '').trim();
+        if (stAtual === 'Concluído' || stAtual === 'Cancelado') return false;
         if (fComodo !== 'TODOS' && m.comodo !== fComodo) return false;
         if (fPrioridade !== 'TODOS' && m.prioridade !== fPrioridade) return false;
         return true;
@@ -824,7 +878,8 @@ function renderizarHistoricoGeral() {
 
     let filtradas = missoes.filter(m => {
         if (fComodo !== 'TODOS' && m.comodo !== fComodo) return false;
-        if (fStatus !== 'TODOS' && (m.status || 'Pendente') !== fStatus) return false;
+        const st = (m.status || 'Pendente').trim();
+        if (fStatus !== 'TODOS' && st !== fStatus) return false;
         if (fDataFormatted !== '' && !(m.data || '').includes(fDataFormatted)) return false;
         return true;
     });
@@ -840,9 +895,10 @@ function renderizarHistoricoGeral() {
     }
 
     container.innerHTML = filtradas.map(m => {
+        const st = (m.status || 'Pendente').trim();
         let corStatus = 'text-purple-300 bg-purple-500/10 border-purple-500/30';
-        if (m.status === 'Concluído') corStatus = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-        if (m.status === 'Cancelado') corStatus = 'text-red-400 bg-red-500/10 border-red-500/30';
+        if (st === 'Concluído') corStatus = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+        if (st === 'Cancelado') corStatus = 'text-red-400 bg-red-500/10 border-red-500/30';
 
         return `
             <div class="bg-[#17112d] border border-purple-900/50 p-3.5 rounded-xl flex items-center justify-between">
@@ -853,7 +909,7 @@ function renderizarHistoricoGeral() {
                     <div>
                         <div class="flex items-center space-x-2">
                             <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
-                            <span class="text-[9px] ${corStatus} border px-1.5 py-0.5 rounded font-mono-code">${m.status || 'Pendente'}</span>
+                            <span class="text-[9px] ${corStatus} border px-1.5 py-0.5 rounded font-mono-code">${st}</span>
                         </div>
                         <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • tempo missão: ${m.tempoEstimado} min</p>
                     </div>
@@ -886,10 +942,11 @@ function abrirDetalhesComodo(comodo, statusFiltro = 'Concluído') {
     const hojeStr = obterDataHojeStr();
     const missoesDoComodo = missoes.filter(m => {
         if (m.comodo !== comodo || m.data !== hojeStr) return false;
+        const st = (m.status || '').trim();
         if (statusFiltro === 'Concluído') {
-            return m.status === 'Concluído';
+            return st === 'Concluído';
         } else {
-            return m.status !== 'Concluído' && m.status !== 'Cancelado';
+            return st !== 'Concluído' && st !== 'Cancelado';
         }
     });
 
@@ -897,12 +954,13 @@ function abrirDetalhesComodo(comodo, statusFiltro = 'Concluído') {
         conteudo.innerHTML = `<p class="text-xs text-purple-300/50 p-4 text-center">Nenhuma missão ${statusTexto.toLowerCase()} neste cômodo hoje.</p>`;
     } else {
         conteudo.innerHTML = missoesDoComodo.map(m => {
+            const st = (m.status || 'Pendente').trim();
             const badgeBg = statusFiltro === 'Concluído' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30';
             return `
                 <div class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl space-y-1">
                     <div class="flex justify-between items-center">
                         <span class="text-xs font-bold text-white">${m.titulo}</span>
-                        <span class="text-[10px] font-mono-code ${badgeBg} px-2 py-0.5 rounded border">${m.status || 'Pendente'}</span>
+                        <span class="text-[10px] font-mono-code ${badgeBg} px-2 py-0.5 rounded border">${st}</span>
                     </div>
                     <p class="text-[11px] text-purple-300/70 font-mono-code">tempo missão: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
                 </div>
@@ -931,8 +989,9 @@ function atualizarEstatisticasGerais() {
     missoes.forEach(m => {
         if (m.data === hojeStr) {
             let comodoKey = m.comodo || 'Outros';
+            let st = (m.status || '').trim();
 
-            if (m.status === 'Concluído') {
+            if (st === 'Concluído') {
                 concluidasTotal++;
                 concluidasPorComodo[comodoKey] = (concluidasPorComodo[comodoKey] || 0) + 1;
 
@@ -941,7 +1000,7 @@ function atualizarEstatisticasGerais() {
                 let ganho = tempoEst - tempoReal;
                 if (ganho > 0) creditosEconomizadosMin += ganho;
 
-            } else if (m.status !== 'Cancelado') {
+            } else if (st !== 'Cancelado') {
                 pendentesTotal++;
                 pendentesPorComodo[comodoKey] = (pendentesPorComodo[comodoKey] || 0) + 1;
                 tempoTotalPrevistoMin += (parseFloat(m.tempoEstimado) || 0);
@@ -1006,6 +1065,7 @@ function atualizarEstatisticasGerais() {
 }
 
 function salvarDadosLocalStorage() {
+    // Mantém apenas dados essenciais e limpa cache redundante de estados antigos de missões
     localStorage.setItem('cq_missoes', JSON.stringify(missoes));
     localStorage.setItem('cq_concluidas', contadorConcluidas.toString());
     if (estadoPonto.trabalhando && estadoPonto.inicioTurnoMs) {
