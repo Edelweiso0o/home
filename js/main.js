@@ -222,9 +222,8 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                 }
             }
 
-            // PLANILHA É A FONTE DA VERDADE: Substitui e mapeia o estado vindo direto do servidor
+            // PLANILHA É A FONTE ABSOLUTA DA VERDADE
             if (data.missoes && data.missoes.length > 0) {
-                const hojeStr = obterDataHojeStr();
                 missoes = data.missoes.map(mServidor => {
                     let statusServidor = (mServidor["Status"] || mServidor.status || "Pendente").trim();
                     
@@ -234,19 +233,20 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                         estadoMissao: statusServidor === "Concluído" ? "Concluído" : (statusServidor === "Cancelado" ? "Cancelado" : (statusServidor === "Em Andamento" ? "EmAndamento" : "Pendente"))
                     };
 
-                    // Se na planilha já consta como concluída ou cancelada, limpa travas locais de andamento
+                    // Se a planilha marca Concluído ou Cancelado, limpa qualquer estado temporário local
                     if (estadoObj.status === 'Concluído' || estadoObj.status === 'Cancelado') {
                         estadoObj.tempoInicioMs = null;
                         estadoObj.horaInicioStr = null;
-                    } else {
-                        // Mantém estado local se ainda estiver em andamento e coerente
+                    } else if (estadoObj.status === 'Em Andamento') {
+                        estadoObj.estadoMissao = 'EmAndamento';
                         let mLocal = missoes.find(x => String(x.id) === String(mServidor.id));
-                        if (mLocal && (mLocal.estadoMissao === 'EmAndamento' || statusServidor === 'Em Andamento')) {
-                            estadoObj.estadoMissao = 'EmAndamento';
-                            estadoObj.status = 'Em Andamento';
+                        if (mLocal && mLocal.tempoInicioMs) {
                             estadoObj.tempoInicioMs = mLocal.tempoInicioMs;
                             if (mLocal.horaInicioStr) estadoObj.horaInicioStr = mLocal.horaInicioStr;
                         }
+                    } else {
+                        estadoObj.tempoInicioMs = null;
+                        estadoObj.horaInicioStr = null;
                     }
                     return estadoObj;
                 });
@@ -273,8 +273,6 @@ async function sincronizarComServidorEmSegundoPlano(acao, payload) {
             body: JSON.stringify({ acao, ...payload })
         });
         const resJson = await response.json();
-        
-        // Assim que enviar para a planilha com sucesso, limpa dados temporários enviados se necessário e atualiza do servidor silenciosamente
         if (resJson && resJson.status === 'success') {
             carregarDadosDoServidor(false);
         }
@@ -444,7 +442,6 @@ async function cadastrarMissao(event) {
     carregarUltimasPreferenciasSelects();
     mostrarNotificacao("Sucesso", "Missão adicionada instantaneamente.", "sucesso", 2000);
 
-    // Envio em segundo plano sem travar o site
     sincronizarComServidorEmSegundoPlano('adicionarMissao', novaMissao).then(resposta => {
         if (resposta && resposta.status === 'success' && resposta.id) {
             novaMissao.id = resposta.id;
@@ -741,7 +738,6 @@ function renderizarMissoes() {
 
     const missoesAtivas = missoes.filter(m => {
         if (m.data && m.data !== hojeStr) return false;
-        // Prioridade na leitura do status vindo da planilha
         const stAtual = (m.status || '').trim();
         if (stAtual === 'Concluído' || stAtual === 'Cancelado') return false;
         if (fComodo !== 'TODOS' && m.comodo !== fComodo) return false;
@@ -1065,7 +1061,6 @@ function atualizarEstatisticasGerais() {
 }
 
 function salvarDadosLocalStorage() {
-    // Mantém apenas dados essenciais e limpa cache redundante de estados antigos de missões
     localStorage.setItem('cq_missoes', JSON.stringify(missoes));
     localStorage.setItem('cq_concluidas', contadorConcluidas.toString());
     if (estadoPonto.trabalhando && estadoPonto.inicioTurnoMs) {
