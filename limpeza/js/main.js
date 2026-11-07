@@ -183,7 +183,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderizarVisaoAtual();
 });
 
-// O navegador guarda apenas uma cópia offline; uma leitura confirmada da planilha sempre vence.
 let leituraAtual = 0;
 let revisaoLocal = 0;
 let enviosPendentes = 0;
@@ -256,9 +255,8 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
         if (!data || data.status !== 'success' || !Array.isArray(data.missoes)) {
             throw new Error(data?.message || 'Resposta inválida da planilha');
         }
-        // Não aplicar uma leitura iniciada antes de uma ação ou de outra leitura mais recente.
         if (leitura !== leituraAtual || revisao !== revisaoLocal || enviosPendentes > 0) return;
-        missoes = data.missoes.map(normalizarMissaoDaPlanilha); // [] também limpa a cópia antiga.
+        missoes = data.missoes.map(normalizarMissaoDaPlanilha);
         contadorConcluidas = missoes.filter(m => m.status === 'Concluído').length;
         ultimaLeituraConfirmada = Date.now();
         if (data.pontoAtivo !== undefined) {
@@ -313,7 +311,6 @@ function sincronizarComServidorEmSegundoPlano(acao, payload) {
     return envio;
 }
 
-// Confere alterações manuais ao voltar à aba, sem consultar a planilha a cada segundo.
 function conferirAoVoltar() {
     if (document.visibilityState === 'visible' && Date.now() - ultimaLeituraConfirmada >= 60000) {
         carregarDadosDoServidor(false);
@@ -584,11 +581,6 @@ function abrirModalEdicao(id) {
     const missao = encontrarMissaoHoje(id);
     if (!missao) return;
 
-    if (missao.status === 'Concluído') {
-        mostrarNotificacao("Bloqueado", "Você não pode editar uma missão já concluída.", "aviso");
-        return;
-    }
-
     const elId = document.getElementById('editIdMissao');
     const elTituloOriginal = document.getElementById('editTituloOriginal');
     const elTitulo = document.getElementById('editInputTitulo');
@@ -849,10 +841,8 @@ function renderizarMissoes() {
             `;
         } else {
             statusBadge = '<span class="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono-code animate-pulse">EM ANDAMENTO</span>';
+            // Botão de edição omitido aqui (ocultado após iniciar)
             botoesAcao = `
-                <button onclick="abrirModalEdicao('${m.id}')" class="text-purple-300/50 hover:text-purple-300 px-2 py-2 text-xs transition mr-1" title="Editar">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
                 <div class="flex items-center space-x-2 mr-2 font-mono-code text-xs text-amber-400 bg-[#090614] px-2.5 py-1 rounded-lg border border-amber-500/30">
                     <i class="fa-solid fa-stopwatch animate-spin"></i>
                     <span id="timer-missao-${m.id}">00:00:00</span>
