@@ -332,7 +332,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      // Aguarda a sincronização para que as novas missões já apareçam no primeiro carregamento do site
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
@@ -601,11 +600,12 @@ export default async function handler(req, res) {
         const colMap = pParsed.colMap;
 
         let missaoAlvo = null;
-        if (data.titulo) {
-          missaoAlvo = dados.slice().reverse().find(m => String(m.titulo).trim().toLowerCase() === String(data.titulo).trim().toLowerCase() && (m.data === hojeStr || !m.data));
-        }
-        if (!missaoAlvo && data.id) {
+        // CORREÇÃO: Priorizar EXCLUSIVAMENTE o ID enviado para evitar pegar outra missão por engano
+        if (data.id) {
           missaoAlvo = dados.find(m => String(m.id) === String(data.id));
+        }
+        if (!missaoAlvo && data.titulo) {
+          missaoAlvo = dados.slice().reverse().find(m => String(m.titulo).trim().toLowerCase() === String(data.titulo).trim().toLowerCase() && (m.data === hojeStr || !m.data));
         }
 
         if (missaoAlvo) {
