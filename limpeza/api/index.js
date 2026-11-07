@@ -304,10 +304,10 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
+      await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
     }
   } catch (e) {
-    console.error("Erro em segundo plano ao sincronizar missões do dia:", e);
+    console.error("Erro ao sincronizar missões do dia:", e);
   }
 }
 
@@ -332,7 +332,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId).catch(err => console.error(err));
+      // Aguarda a sincronização para que as novas missões já apareçam no primeiro carregamento do site
+      await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
@@ -460,7 +461,7 @@ export default async function handler(req, res) {
           }
         }
 
-        formatarTabelaCompleta(sheets, spreadsheetId, "Registro de Ponto").catch(err => console.error(err));
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Registro de Ponto");
         return res.status(200).json({ status: "success" });
       }
 
@@ -491,7 +492,7 @@ export default async function handler(req, res) {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [rowArrayM] }
         });
-        formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
 
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
         const pParsed = parseSheetRows(progRes.data.values || []);
@@ -523,7 +524,7 @@ export default async function handler(req, res) {
           requestBody: { values: [rowArrayP] }
         });
 
-        formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoIdProg });
       }
 
@@ -557,7 +558,7 @@ export default async function handler(req, res) {
               requestBody: { valueInputOption: 'USER_ENTERED', data: mUpdates }
             });
           }
-          formatarTabelaCompleta(sheets, spreadsheetId, "Missões").catch(err => console.error(err));
+          await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
         // 2. Atualizar na aba "Progresso Diário"
@@ -587,7 +588,7 @@ export default async function handler(req, res) {
               requestBody: { valueInputOption: 'USER_ENTERED', data: pUpdates }
             });
           }
-          formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
+          await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         }
 
         return res.status(200).json({ status: "success" });
@@ -675,7 +676,7 @@ export default async function handler(req, res) {
           }
         }
 
-        formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário").catch(err => console.error(err));
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
