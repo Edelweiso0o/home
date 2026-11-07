@@ -69,6 +69,21 @@ function parseSheetRows(rows) {
   return { headerRowIndex, colMap, dataRows };
 }
 
+function normalizarStatusMissao(valor) {
+  const chave = String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '');
+  if (['concluido', 'concluida', 'finalizado', 'finalizada'].includes(chave)) return 'Concluído';
+  if (['cancelado', 'cancelada'].includes(chave)) return 'Cancelado';
+  if (chave === 'emandamento') return 'Em Andamento';
+  return 'Pendente';
+}
+
+function selecionarMissao(dados, pedido, hojeStr) {
+  const dataAlvo = String(pedido.data || hojeStr).trim();
+  if (pedido.id === undefined || pedido.id === null || pedido.id === '') return null;
+  const candidatas = dados.filter(m => String(m.id) === String(pedido.id) && String(m.data).trim() === dataAlvo);
+  return candidatas.length === 1 ? candidatas[0] : null;
+}
+
 async function getSheetData(sheets, spreadsheetId, rangeName) {
   const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: rangeName });
   const rows = res.data.values;
@@ -87,7 +102,8 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
     obj.comodo = obj["Cômodo"] || "";
     obj.tempoEstimado = obj["Tempo Est. (min)"] || "";
     obj.prioridade = obj["Prioridade"] || "";
-    obj.status = obj["Status"] || obj["Status do Turno"] || "";
+    obj.status = obj["Status"] !== undefined ? normalizarStatusMissao(obj["Status"]) : obj["Status do Turno"] || "";
+    if (obj["Status"] !== undefined) obj["Status"] = obj.status;
     return obj;
   });
 }
@@ -312,6 +328,9 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -566,13 +585,12 @@ export default async function handler(req, res) {
         const pColMap = pParsed.colMap;
         const pDataRows = pParsed.dataRows;
 
-        let pLinhaAlvo = -1;
-        pDataRows.forEach((row, idx) => {
-          const tVal = String(row[pColMap["Título da Missão"]] || "").trim().toLowerCase();
-          if (tVal === tituloBusca) {
-            pLinhaAlvo = idx + (progRes.data.values.length - pDataRows.length + 1);
-          }
-        });
+        const candidatas = pDataRows.map((row, idx) => ({ row, linha: idx + pParsed.headerRowIndex + 2 }))
+          .filter(({ row }) => String(row[pColMap['ID']]) === String(data.id) && String(row[pColMap['Data']] || '').trim() === String(data.data || hojeStr).trim());
+        const pLinhaAlvo = candidatas.length === 1 ? candidatas[0].linha : -1;
+        if (pLinhaAlvo === -1) {
+          return res.status(409).json({ status: 'error', message: 'Missão não encontrada ou ID/data ambíguos.' });
+        }
 
         if (pLinhaAlvo !== -1) {
           let pUpdates = [];
@@ -599,13 +617,13 @@ export default async function handler(req, res) {
         const pParsed = parseSheetRows(progRes.data.values || []);
         const colMap = pParsed.colMap;
 
-        let missaoAlvo = null;
-        // CORREÇÃO: Priorizar EXCLUSIVAMENTE o ID enviado para evitar pegar outra missão por engano
-        if (data.id) {
-          missaoAlvo = dados.find(m => String(m.id) === String(data.id));
+        const missaoAlvo = selecionarMissao(dados, data, hojeStr);
+        if (!missaoAlvo) {
+          return res.status(409).json({ status: 'error', message: 'Missão não encontrada ou ID/data ambíguos. Atualize o painel antes de tentar novamente.' });
         }
-        if (!missaoAlvo && data.titulo) {
-          missaoAlvo = dados.slice().reverse().find(m => String(m.titulo).trim().toLowerCase() === String(data.titulo).trim().toLowerCase() && (m.data === hojeStr || !m.data));
+        // Uma missão já concluída na planilha não pode ser reiniciada por uma cópia antiga do navegador.
+        if (missaoAlvo.status === 'Concluído') {
+          return res.status(200).json({ status: 'success', jaConcluida: true });
         }
 
         if (missaoAlvo) {
