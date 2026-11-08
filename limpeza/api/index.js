@@ -22,6 +22,13 @@ function getHoraAtualStr() {
   return new Intl.DateTimeFormat('pt-BR', options).format(d);
 }
 
+function parseDataPtBrParaMs(dataStr) {
+  if (!dataStr) return 0;
+  const partes = String(dataStr).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!partes) return 0;
+  return new Date(`${partes[3]}-${partes[2].padStart(2, '0')}-${partes[1].padStart(2, '0')}T00:00:00-03:00`).getTime();
+}
+
 function columnToLetter(column) {
   let temp, letter = '';
   while (column > 0) {
@@ -46,7 +53,7 @@ function parseSheetRows(rows) {
       if (cell) {
         const val = String(cell).trim();
         tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Créditos', 'Crédito', 'Tempo Est. (min)'].includes(val)) {
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Frequência (Dias)'].includes(val)) {
           matches++;
         }
       }
@@ -102,6 +109,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
     obj.comodo = obj["Cômodo"] || "";
     obj.tempoEstimado = obj["Tempo Est. (min)"] || "";
     obj.prioridade = obj["Prioridade"] || "";
+    obj.frequenciaDias = parseInt(obj["Frequência (Dias)"] || 1, 10) || 1;
     obj.status = obj["Status"] !== undefined ? normalizarStatusMissao(obj["Status"]) : obj["Status do Turno"] || "";
     if (obj["Status"] !== undefined) obj["Status"] = obj.status;
     return obj;
@@ -131,13 +139,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
     let requests = [
       {
         repeatCell: {
-          range: {
-            sheetId,
-            startRowIndex: startRowIndex + 1,
-            endRowIndex,
-            startColumnIndex,
-            endColumnIndex
-          },
+          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
           cell: {
             userEnteredFormat: {
               horizontalAlignment: "CENTER",
@@ -154,18 +156,8 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
     if (tituloColIdx !== undefined) {
       requests.push({
         repeatCell: {
-          range: {
-            sheetId,
-            startRowIndex: startRowIndex + 1,
-            endRowIndex,
-            startColumnIndex: tituloColIdx,
-            endColumnIndex: tituloColIdx + 1
-          },
-          cell: {
-            userEnteredFormat: {
-              horizontalAlignment: "LEFT"
-            }
-          },
+          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex: tituloColIdx, endColumnIndex: tituloColIdx + 1 },
+          cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } },
           fields: "userEnteredFormat.horizontalAlignment"
         }
       });
@@ -173,13 +165,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 
     requests.push({
       repeatCell: {
-        range: {
-          sheetId,
-          startRowIndex,
-          endRowIndex: startRowIndex + 1,
-          startColumnIndex,
-          endColumnIndex
-        },
+        range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
         cell: {
           userEnteredFormat: {
             backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
@@ -192,16 +178,9 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 1. Borda Externa Média na Cor Preta
     requests.push({
       updateBorders: {
-        range: {
-          sheetId,
-          startRowIndex,
-          endRowIndex,
-          startColumnIndex,
-          endColumnIndex
-        },
+        range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
         top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
@@ -209,42 +188,25 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 2. Bordas Internas do Corpo da Tabela em Laranja
     if (endRowIndex > startRowIndex + 1) {
       requests.push({
         updateBorders: {
-          range: {
-            sheetId,
-            startRowIndex: startRowIndex + 1,
-            endRowIndex,
-            startColumnIndex,
-            endColumnIndex
-          },
+          range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
           innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
           innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
         }
       });
     }
 
-    // 3. Bordas do Cabeçalho (Preto)
     requests.push({
       updateBorders: {
-        range: {
-          sheetId,
-          startRowIndex,
-          endRowIndex: startRowIndex + 1,
-          startColumnIndex,
-          endColumnIndex
-        },
+        range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
         bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
         innerVertical: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } }
       }
     });
 
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests }
-    });
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
   } catch (e) {
     console.error(`Erro ao formatar tabela ${sheetName}:`, e);
   }
@@ -253,6 +215,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
     const hojeStr = getDataHojeStr();
+    const hojeMs = parseDataPtBrParaMs(hojeStr);
     
     const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z100" });
     const mParsed = parseSheetRows(missoesRes.data.values || []);
@@ -285,30 +248,54 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       let comodo = mRow[mColMap["Cômodo"]] || "";
       let tempoEst = mRow[mColMap["Tempo Est. (min)"]] || "";
       let prioridade = mRow[mColMap["Prioridade"]] || "Média";
+      let frequenciaDias = parseInt(mRow[mColMap["Frequência (Dias)"]] || 1, 10) || 1;
 
       if (titulo) {
-        const jaExiste = missoesHojeNaPlanilha.some(pRow => {
+        const jaExisteHoje = missoesHojeNaPlanilha.some(pRow => {
           const tVal = pRow[pColMap["Título da Missão"]] || "";
           return String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase();
         });
 
-        if (!jaExiste) {
-          let maxColIndex = Math.max(...Object.values(pColMap), 0);
-          let rowArray = new Array(maxColIndex + 1).fill("");
-          
-          if (pColMap["ID"] !== undefined) rowArray[pColMap["ID"]] = currentId;
-          if (pColMap["Data"] !== undefined) rowArray[pColMap["Data"]] = hojeStr;
-          if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
-          if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
-          if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
-          if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
-          if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
-          if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
-          if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
-          if (pColMap["Crédito"] !== undefined) rowArray[pColMap["Crédito"]] = "";
+        if (!jaExisteHoje) {
+          // Verificar inteligência de intervalo: quando foi a última vez que essa missão foi concluída?
+          let ultimaConclusaoMs = 0;
+          pData.forEach(pRow => {
+            const tVal = pRow[pColMap["Título da Missão"]] || "";
+            const stVal = normalizarStatusMissao(pRow[pColMap["Status"]]);
+            const dataVal = pRow[pColMap["Data"]] || "";
+            if (String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase() && stVal === 'Concluído') {
+              const dMs = parseDataPtBrParaMs(dataVal);
+              if (dMs > ultimaConclusaoMs) ultimaConclusaoMs = dMs;
+            }
+          });
 
-          newRows.push(rowArray);
-          currentId++;
+          let deveLancar = true;
+          if (ultimaConclusaoMs > 0 && frequenciaDias > 1) {
+            const diffDias = Math.round((hojeMs - ultimaConclusaoMs) / (1000 * 60 * 60 * 24));
+            if (diffDias < frequenciaDias) {
+              deveLancar = false; // Ainda não atingiu o intervalo configurado
+            }
+          }
+
+          if (deveLancar) {
+            let maxColIndex = Math.max(...Object.values(pColMap), 0);
+            let rowArray = new Array(maxColIndex + 1).fill("");
+            
+            if (pColMap["ID"] !== undefined) rowArray[pColMap["ID"]] = currentId;
+            if (pColMap["Data"] !== undefined) rowArray[pColMap["Data"]] = hojeStr;
+            if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
+            if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
+            if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
+            if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
+            if (pColMap["Frequência (Dias)"] !== undefined) rowArray[pColMap["Frequência (Dias)"]] = frequenciaDias;
+            if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
+            if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
+            if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
+            if (pColMap["Crédito"] !== undefined) rowArray[pColMap["Crédito"]] = "";
+
+            newRows.push(rowArray);
+            currentId++;
+          }
         }
       }
     });
@@ -470,10 +457,7 @@ export default async function handler(req, res) {
             if (dataUpdates.length > 0) {
               await sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId,
-                requestBody: {
-                  valueInputOption: 'USER_ENTERED',
-                  data: dataUpdates
-                }
+                requestBody: { valueInputOption: 'USER_ENTERED', data: dataUpdates }
               });
             }
           }
@@ -503,6 +487,7 @@ export default async function handler(req, res) {
         if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
         if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
         if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
+        if (mColMap["Frequência (Dias)"] !== undefined) rowArrayM[mColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -532,6 +517,7 @@ export default async function handler(req, res) {
         if (pColMap["Cômodo"] !== undefined) rowArrayP[pColMap["Cômodo"]] = data.comodo;
         if (pColMap["Tempo Est. (min)"] !== undefined) rowArrayP[pColMap["Tempo Est. (min)"]] = data.tempoEstimado;
         if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
+        if (pColMap["Frequência (Dias)"] !== undefined) rowArrayP[pColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
         if (pColMap["Status"] !== undefined) rowArrayP[pColMap["Status"]] = "Pendente";
         if (pColMap["Crédito"] !== undefined) rowArrayP[pColMap["Crédito"]] = "";
 
@@ -549,7 +535,6 @@ export default async function handler(req, res) {
       if (acao === 'editarMissao') {
         const tituloBusca = String(data.tituloOriginal || data.titulo).trim().toLowerCase();
 
-        // 1. Atualizar na aba "Missões"
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
@@ -569,6 +554,7 @@ export default async function handler(req, res) {
           if (data.comodo && mColMap["Cômodo"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Cômodo"] + 1)}${mLinhaAlvo}`, values: [[data.comodo]] });
           if (data.tempoEstimado !== undefined && mColMap["Tempo Est. (min)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Tempo Est. (min)"] + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
           if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
+          if (data.frequenciaDias !== undefined && mColMap["Frequência (Dias)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Frequência (Dias)"] + 1)}${mLinhaAlvo}`, values: [[data.frequenciaDias]] });
 
           if (mUpdates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -579,7 +565,6 @@ export default async function handler(req, res) {
           await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
-        // 2. Atualizar na aba "Progresso Diário"
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
@@ -588,9 +573,6 @@ export default async function handler(req, res) {
         const candidatas = pDataRows.map((row, idx) => ({ row, linha: idx + pParsed.headerRowIndex + 2 }))
           .filter(({ row }) => String(row[pColMap['ID']]) === String(data.id) && String(row[pColMap['Data']] || '').trim() === String(data.data || hojeStr).trim());
         const pLinhaAlvo = candidatas.length === 1 ? candidatas[0].linha : -1;
-        if (pLinhaAlvo === -1) {
-          return res.status(409).json({ status: 'error', message: 'Missão não encontrada ou ID/data ambíguos.' });
-        }
 
         if (pLinhaAlvo !== -1) {
           let pUpdates = [];
@@ -598,6 +580,7 @@ export default async function handler(req, res) {
           if (data.comodo && pColMap["Cômodo"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Cômodo"] + 1)}${pLinhaAlvo}`, values: [[data.comodo]] });
           if (data.tempoEstimado !== undefined && pColMap["Tempo Est. (min)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Tempo Est. (min)"] + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
           if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
+          if (data.frequenciaDias !== undefined && pColMap["Frequência (Dias)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Frequência (Dias)"] + 1)}${pLinhaAlvo}`, values: [[data.frequenciaDias]] });
 
           if (pUpdates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -619,79 +602,67 @@ export default async function handler(req, res) {
 
         const missaoAlvo = selecionarMissao(dados, data, hojeStr);
         if (!missaoAlvo) {
-          return res.status(409).json({ status: 'error', message: 'Missão não encontrada ou ID/data ambíguos. Atualize o painel antes de tentar novamente.' });
+          return res.status(409).json({ status: 'error', message: 'Missão não encontrada ou ID/data ambíguos.' });
         }
-        // Uma missão já concluída na planilha não pode ser reiniciada por uma cópia antiga do navegador.
         if (missaoAlvo.status === 'Concluído') {
           return res.status(200).json({ status: 'success', jaConcluida: true });
         }
 
-        if (missaoAlvo) {
-          const linha = missaoAlvo._linha;
-          let dataUpdates = [];
+        const linha = missaoAlvo._linha;
+        let dataUpdates = [];
 
-          if (data.estadoMissao === 'EmAndamento') {
-            if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
-            if (data.horaExata && colMap["Hora de Início"] !== undefined) {
-              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaExata]] });
-            }
-          } else if (acao === 'concluirMissao') {
-            if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
-            
-            const horaTerminoStr = data.horaExata || getHoraAtualStr();
-            if (colMap["Hora de Término"] !== undefined) {
-              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[horaTerminoStr]] });
-            }
-
-            if (colMap["Hora de Início"] !== undefined && data.horaInicio && !missaoAlvo["Hora de Início"]) {
-              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaInicio]] });
-            }
-
-            if (colMap["Créditos"] !== undefined) {
-              const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || data.tempoEst || missaoAlvo.tempoEstimado) || 0;
-              const horaInicioStr = missaoAlvo["Hora de Início"] || data.horaInicio || "";
-
-              let diffSegs = 0;
-              if (horaInicioStr && horaTerminoStr) {
-                const [hi, mi, si] = horaInicioStr.split(':').map(Number);
-                const [ht, mt, st] = horaTerminoStr.split(':').map(Number);
-
-                const totalSegsInicio = (hi || 0) * 3600 + (mi || 0) * 60 + (si || 0);
-                const totalSegsTermino = (ht || 0) * 3600 + (mt || 0) * 60 + (st || 0);
-                const tempoGastoSegs = totalSegsTermino - totalSegsInicio;
-
-                const tempoEstSegs = tempoEstMin * 60;
-                diffSegs = Math.round(tempoEstSegs - tempoGastoSegs);
-              }
-
-              let creditoFormatado = "0s";
-              if (diffSegs > 0) {
-                const mins = Math.floor(diffSegs / 60);
-                const segs = diffSegs % 60;
-                if (mins > 0) {
-                  creditoFormatado = `${mins}min e ${segs}s`;
-                } else {
-                  creditoFormatado = `${segs}s`;
-                }
-              } else {
-                creditoFormatado = "0s";
-              }
-
-              dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Créditos"] + 1)}${linha}`, values: [[creditoFormatado]] });
-            }
-          } else if (data.estadoMissao === 'Cancelado') {
-            if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
+        if (data.estadoMissao === 'EmAndamento') {
+          if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Em Andamento"]] });
+          if (data.horaExata && colMap["Hora de Início"] !== undefined) {
+            dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaExata]] });
+          }
+        } else if (acao === 'concluirMissao') {
+          if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Concluído"]] });
+          
+          const horaTerminoStr = data.horaExata || getHoraAtualStr();
+          if (colMap["Hora de Término"] !== undefined) {
+            dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Término"] + 1)}${linha}`, values: [[horaTerminoStr]] });
           }
 
-          if (dataUpdates.length > 0) {
-            await sheets.spreadsheets.values.batchUpdate({
-              spreadsheetId,
-              requestBody: {
-                valueInputOption: 'RAW',
-                data: dataUpdates
-              }
-            });
+          if (colMap["Hora de Início"] !== undefined && data.horaInicio && !missaoAlvo["Hora de Início"]) {
+            dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaInicio]] });
           }
+
+          if (colMap["Créditos"] !== undefined) {
+            const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || data.tempoEst || missaoAlvo.tempoEstimado) || 0;
+            const horaInicioStr = missaoAlvo["Hora de Início"] || data.horaInicio || "";
+
+            let diffSegs = 0;
+            if (horaInicioStr && horaTerminoStr) {
+              const [hi, mi, si] = horaInicioStr.split(':').map(Number);
+              const [ht, mt, st] = horaTerminoStr.split(':').map(Number);
+
+              const totalSegsInicio = (hi || 0) * 3600 + (mi || 0) * 60 + (si || 0);
+              const totalSegsTermino = (ht || 0) * 3600 + (mt || 0) * 60 + (st || 0);
+              const tempoGastoSegs = totalSegsTermino - totalSegsInicio;
+
+              const tempoEstSegs = tempoEstMin * 60;
+              diffSegs = Math.round(tempoEstSegs - tempoGastoSegs);
+            }
+
+            let creditoFormatado = "0s";
+            if (diffSegs > 0) {
+              const mins = Math.floor(diffSegs / 60);
+              const segs = diffSegs % 60;
+              creditoFormatado = mins > 0 ? `${mins}min e ${segs}s` : `${segs}s`;
+            }
+
+            dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Créditos"] + 1)}${linha}`, values: [[creditoFormatado]] });
+          }
+        } else if (data.estadoMissao === 'Cancelado') {
+          if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
+        }
+
+        if (dataUpdates.length > 0) {
+          await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId,
+            requestBody: { valueInputOption: 'RAW', data: dataUpdates }
+          });
         }
 
         await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
