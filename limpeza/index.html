@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Central de Tarefas v2.0.0 - RPG Dashboard</title>
+    <title>Central de Tarefas v2.1.0 - RPG Dashboard</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧹</text></svg>">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=2.1.0">
 </head>
 <body class="bg-[#0f0b1e] text-slate-100 h-screen overflow-hidden flex flex-col justify-between selection:bg-purple-500 selection:text-slate-900 relative">
 
@@ -34,7 +34,7 @@
                 <div>
                     <div class="flex items-center space-x-2">
                         <h1 class="text-base font-black uppercase tracking-wider text-white">Central de <span class="text-purple-400">Tarefas</span></h1>
-                        <span class="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono-code">v2.0.0</span>
+                        <span class="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono-code">v2.1.0</span>
                     </div>
                     <p class="text-[11px] text-purple-300/70 font-mono-code">Gerenciador de Limpeza Doméstica</p>
                 </div>
@@ -177,6 +177,7 @@
         </div>
     </main>
 
+    <!-- Modal Nova Missão -->
     <div id="modalNovaMissao" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
@@ -214,9 +215,17 @@
                         <option value="Baixa">Baixa</option>
                     </select>
                 </div>
-                <div class="flex items-center space-x-2 pt-1">
-                    <input type="checkbox" id="inputUnica" class="w-4 h-4 rounded bg-[#090614] border-purple-800 text-purple-600">
-                    <label for="inputUnica" class="text-xs text-purple-200">Missão Única (não repete todo dia)</label>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Frequência (Repetir a cada X dias)</label>
+                    <select id="inputFrequencia" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
+                        <option value="1" selected>Todos os dias (1 dia)</option>
+                        <option value="2">Um dia sim, um dia não (2 dias)</option>
+                        <option value="3">A cada 3 dias</option>
+                        <option value="4">A cada 4 dias</option>
+                        <option value="5">A cada 5 dias</option>
+                        <option value="7">Uma vez por semana (7 dias)</option>
+                        <option value="15">A cada 15 dias</option>
+                    </select>
                 </div>
                 <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
                     <button type="button" onclick="fecharModalNovaMissao()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 hover:bg-purple-950/30 transition">Cancelar</button>
@@ -226,6 +235,7 @@
         </div>
     </div>
 
+    <!-- Modal Detalhes Cômodo -->
     <div id="modalDetalhesComodo" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[80vh] flex flex-col">
             <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
@@ -238,6 +248,7 @@
         </div>
     </div>
 
+    <!-- Modal Editar Missão -->
     <div id="modalEditarMissao" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
@@ -277,9 +288,17 @@
                         <option value="Baixa">Baixa</option>
                     </select>
                 </div>
-                <div class="flex items-center space-x-2 pt-1">
-                    <input type="checkbox" id="editInputUnica" class="w-4 h-4 rounded bg-[#090614] border-purple-800 text-purple-600">
-                    <label for="editInputUnica" class="text-xs text-purple-200">Missão Única (não repete todo dia)</label>
+                <div>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Frequência (Repetir a cada X dias)</label>
+                    <select id="editInputFrequencia" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
+                        <option value="1">Todos os dias (1 dia)</option>
+                        <option value="2">Um dia sim, um dia não (2 dias)</option>
+                        <option value="3">A cada 3 dias</option>
+                        <option value="4">A cada 4 dias</option>
+                        <option value="5">A cada 5 dias</option>
+                        <option value="7">Uma vez por semana (7 dias)</option>
+                        <option value="15">A cada 15 dias</option>
+                    </select>
                 </div>
                 <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
                     <button type="button" onclick="fecharModalEdicao()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 hover:bg-purple-950/30 transition">Cancelar</button>
@@ -289,6 +308,7 @@
         </div>
     </div>
 
+    <!-- Modal Duplicar Rápido -->
     <div id="modalDuplicarRapido" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
@@ -302,6 +322,6 @@
         </div>
     </div>
 
-    <script src="js/main.js"></script>
+    <script src="js/main.js?v=2.1.0"></script>
 </body>
 </html>
