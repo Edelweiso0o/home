@@ -49,7 +49,7 @@ function mostrarLoader(status, tempoMs = null) {
             setTimeout(() => {
                 loader.classList.add('hidden');
                 loader.classList.remove('flex');
-            }, 800);
+            }, 500);
         } else {
             loader.classList.add('hidden');
             loader.classList.remove('flex');
@@ -77,11 +77,6 @@ function mostrarNotificacao(titulo, mensagem, tipo = 'info', duracaoMs = 3000) {
         corIcone = 'text-amber-400';
         iconeFa = 'fa-triangle-exclamation';
         corBarra = 'bg-amber-500';
-    } else if (tipo === 'sincronizando') {
-        corBorda = 'border-indigo-500/60';
-        corIcone = 'text-indigo-400 animate-spin';
-        iconeFa = 'fa-rotate';
-        corBarra = 'bg-indigo-500';
     }
 
     const toastEl = document.createElement('div');
@@ -113,8 +108,6 @@ function mostrarNotificacao(titulo, mensagem, tipo = 'info', duracaoMs = 3000) {
         toastEl.classList.add('hiding');
         setTimeout(() => toastEl.remove(), 300);
     }, duracaoMs);
-
-    return toastId;
 }
 
 function iniciarRelogio() {
@@ -144,7 +137,7 @@ function iniciarRelogio() {
 function processarCicloSegundo() {
     if (estadoPonto.trabalhando && estadoPonto.inicioTurnoMs) {
         const diffMs = Date.now() - estadoPonto.inicioTurnoMs;
-        estadoPonto.segundosTurnoAtual = Math.floor(diffMs / 1000);
+        estadoPonto.segundosTurnoAtual = Math.max(0, Math.floor(diffMs / 1000));
     }
 
     const agora = Date.now();
@@ -224,6 +217,7 @@ function normalizarMissaoDaPlanilha(m) {
         titulo: m['Título da Missão'] ?? m.titulo ?? '',
         comodo: String(m['Cômodo'] ?? m.comodo ?? '').trim(),
         tempoEstimado: m['Tempo Est. (min)'] ?? m.tempoEstimado ?? 0,
+        frequenciaDias: parseInt(m['Frequência (Dias)'] ?? m.frequenciaDias ?? 1, 10) || 1,
         status,
         estadoMissao: status === 'Em Andamento' ? 'EmAndamento' : status,
         tempoInicioMs,
@@ -259,11 +253,19 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
         missoes = data.missoes.map(normalizarMissaoDaPlanilha);
         contadorConcluidas = missoes.filter(m => m.status === 'Concluído').length;
         ultimaLeituraConfirmada = Date.now();
+        
         if (data.pontoAtivo !== undefined) {
-            estadoPonto.trabalhando = Boolean(data.pontoAtivo);
-            estadoPonto.inicioTurnoMs = estadoPonto.trabalhando ? Number(data.horaEntradaMs) || null : null;
-            estadoPonto.segundosTurnoAtual = estadoPonto.inicioTurnoMs ? Math.max(0, Math.floor((Date.now() - estadoPonto.inicioTurnoMs) / 1000)) : 0;
-            if (!estadoPonto.trabalhando) localStorage.removeItem('cq_ponto_inicio');
+            const servidorTrabalhando = Boolean(data.pontoAtivo);
+            if (servidorTrabalhando && data.horaEntradaMs) {
+                estadoPonto.trabalhando = true;
+                estadoPonto.inicioTurnoMs = Number(data.horaEntradaMs);
+                estadoPonto.segundosTurnoAtual = Math.max(0, Math.floor((Date.now() - estadoPonto.inicioTurnoMs) / 1000));
+            } else if (!servidorTrabalhando) {
+                estadoPonto.trabalhando = false;
+                estadoPonto.inicioTurnoMs = null;
+                estadoPonto.segundosTurnoAtual = 0;
+                localStorage.removeItem('cq_ponto_inicio');
+            }
         }
         if (Array.isArray(data.turnos)) {
             turnosRegistrados = data.turnos;
@@ -276,7 +278,7 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
         processarCicloSegundo();
     } catch (error) {
         console.warn('Não foi possível consultar a planilha:', error);
-        mostrarNotificacao('Sem atualização da planilha', 'Exibindo a última cópia salva. Tente atualizar novamente.', 'aviso', 4000);
+        mostrarNotificacao('Sem atualização da planilha', 'Exibindo a última cópia salva.', 'aviso', 4000);
     } finally {
         if (leitura === leituraAtual) mostrarLoader(false, performance.now() - inicioMs);
     }
@@ -300,7 +302,7 @@ function sincronizarComServidorEmSegundoPlano(acao, payload) {
             return resposta;
         } catch (error) {
             console.error('Erro ao salvar na planilha:', error);
-            mostrarNotificacao('Alteração não confirmada', 'Não foi possível confirmar a gravação; o painel será conferido com a planilha.', 'aviso', 5000);
+            mostrarNotificacao('Alteração não confirmada', 'Não foi possível confirmar a gravação; o painel será conferido.', 'aviso', 5000);
             return { status: 'error', message: String(error) };
         } finally {
             enviosPendentes--;
@@ -329,7 +331,8 @@ async function alternarPonto() {
     }
 
     const proximoStatus = !estadoPonto.trabalhando;
-    
+    mostrarLoader(true); // Loader instantâneo visível
+
     if (proximoStatus) {
         const dataAtual = new Date();
         const horaEntradaStr = String(dataAtual.getHours()).padStart(2, '0') + ":" + String(dataAtual.getMinutes()).padStart(2, '0') + ":" + String(dataAtual.getSeconds()).padStart(2, '0');
@@ -344,7 +347,7 @@ async function alternarPonto() {
         atualizarDisplaysPonto();
         mostrarNotificacao("Ponto Registrado", "Turno iniciado instantaneamente!", "sucesso", 2000);
 
-        sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'ENTRADA', horaExata: horaEntradaStr });
+        await sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'ENTRADA', horaExata: horaEntradaStr });
     } else {
         const duracaoSegs = estadoPonto.segundosTurnoAtual;
         
@@ -358,9 +361,10 @@ async function alternarPonto() {
         atualizarDisplaysPonto();
         mostrarNotificacao("Turno Encerrado", "Você entrou em folga.", "atencao", 2000);
 
-        sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'SAIDA', duracaoSegundos: duracaoSegs });
+        await sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'SAIDA', duracaoSegundos: duracaoSegs });
     }
     salvarDadosLocalStorage();
+    mostrarLoader(false);
 }
 
 function atualizarDisplaysPonto() {
@@ -444,13 +448,13 @@ async function cadastrarMissao(event) {
     const comodo = document.getElementById('selectComodo').value;
     const tempoEst = parseInt(document.getElementById('inputTempoEstimado').value, 10);
     const prioridade = document.getElementById('selectPrioridade').value;
-    const missaoUnicaEl = document.getElementById('inputUnica');
-    const missaoUnica = missaoUnicaEl ? missaoUnicaEl.checked : false;
+    const frequenciaDias = parseInt(document.getElementById('inputFrequencia').value || 1, 10);
 
     if (!titulo) return;
 
     localStorage.setItem('cq_last_comodo', comodo);
     localStorage.setItem('cq_last_prioridade', prioridade);
+    localStorage.setItem('cq_last_frequencia', frequenciaDias);
 
     const hojeStr = obterDataHojeStr();
 
@@ -461,11 +465,11 @@ async function cadastrarMissao(event) {
         comodo: comodo,
         tempoEstimado: tempoEst,
         prioridade: prioridade,
+        frequenciaDias: frequenciaDias,
         status: 'Pendente',
         estadoMissao: 'Pendente',
         tempoInicioMs: null,
-        horaInicioStr: null,
-        missaoUnica: missaoUnica
+        horaInicioStr: null
     };
 
     missoes.push(novaMissao);
@@ -473,7 +477,6 @@ async function cadastrarMissao(event) {
     renderizarVisaoAtual();
 
     document.getElementById('formNovaMissao').reset();
-    if (missaoUnicaEl) missaoUnicaEl.checked = false;
     fecharModalNovaMissao();
     carregarUltimasPreferenciasSelects();
     mostrarNotificacao("Sucesso", "Missão adicionada instantaneamente.", "sucesso", 2000);
@@ -508,7 +511,7 @@ function abrirModalDuplicarRapido() {
             <div onclick="duplicarMissaoPorTitulo('${m.titulo}')" class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl hover:border-purple-500 cursor-pointer transition flex justify-between items-center">
                 <div>
                     <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
-                    <p class="text-[10px] text-purple-300/60">${m.comodo} • tempo missão: ${m.tempoEstimado} min</p>
+                    <p class="text-[10px] text-purple-300/60">${m.comodo} • tempo: ${m.tempoEstimado} min • a cada ${m.frequenciaDias} dia(s)</p>
                 </div>
                 <span class="text-xs bg-purple-600/20 text-purple-300 px-2.5 py-1 rounded-lg font-mono-code"><i class="fa-solid fa-plus mr-1"></i> Repetir</span>
             </div>
@@ -543,11 +546,11 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
         comodo: missaoRef.comodo,
         tempoEstimado: missaoRef.tempoEstimado,
         prioridade: missaoRef.prioridade,
+        frequenciaDias: missaoRef.frequenciaDias,
         status: 'Pendente',
         estadoMissao: 'Pendente',
         tempoInicioMs: null,
-        horaInicioStr: null,
-        missaoUnica: true
+        horaInicioStr: null
     };
 
     missoes.push(novaMissaoDuplicada);
@@ -567,6 +570,7 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
 function carregarUltimasPreferenciasSelects() {
     const lastComodo = localStorage.getItem('cq_last_comodo');
     const lastPrioridade = localStorage.getItem('cq_last_prioridade');
+    const lastFreq = localStorage.getItem('cq_last_frequencia');
     if (lastComodo) {
         const sel = document.getElementById('selectComodo');
         if (sel) sel.value = lastComodo;
@@ -574,6 +578,10 @@ function carregarUltimasPreferenciasSelects() {
     if (lastPrioridade) {
         const selP = document.getElementById('selectPrioridade');
         if (selP) selP.value = lastPrioridade;
+    }
+    if (lastFreq) {
+        const selF = document.getElementById('inputFrequencia');
+        if (selF) selF.value = lastFreq;
     }
 }
 
@@ -587,7 +595,7 @@ function abrirModalEdicao(id) {
     const elComodo = document.getElementById('editSelectComodo');
     const elTempo = document.getElementById('editInputTempoEstimado');
     const elPrioridade = document.getElementById('editSelectPrioridade');
-    const elUnica = document.getElementById('editInputUnica');
+    const elFrequencia = document.getElementById('editInputFrequencia');
 
     if (elId) elId.value = missao.id;
     if (elTituloOriginal) elTituloOriginal.value = missao.titulo;
@@ -595,7 +603,7 @@ function abrirModalEdicao(id) {
     if (elComodo) elComodo.value = missao.comodo;
     if (elTempo) elTempo.value = missao.tempoEstimado;
     if (elPrioridade) elPrioridade.value = missao.prioridade;
-    if (elUnica) elUnica.checked = !!missao.missaoUnica;
+    if (elFrequencia) elFrequencia.value = missao.frequenciaDias || 1;
 
     const modal = document.getElementById('modalEditarMissao');
     if (modal) modal.classList.remove('hidden');
@@ -618,14 +626,13 @@ async function salvarEdicaoMissao(event) {
     const comodoNovo = document.getElementById('editSelectComodo').value;
     const tempoNovo = parseInt(document.getElementById('editInputTempoEstimado').value, 10);
     const prioridadeNova = document.getElementById('editSelectPrioridade').value;
+    const frequenciaNova = parseInt(document.getElementById('editInputFrequencia').value || 1, 10);
 
     missao.titulo = tituloNovo;
     missao.comodo = comodoNovo;
     missao.tempoEstimado = tempoNovo;
     missao.prioridade = prioridadeNova;
-    
-    const elUnica = document.getElementById('editInputUnica');
-    if (elUnica) missao.missaoUnica = elUnica.checked;
+    missao.frequenciaDias = frequenciaNova;
 
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
@@ -637,7 +644,8 @@ async function salvarEdicaoMissao(event) {
         titulo: tituloNovo,
         comodo: comodoNovo,
         tempoEstimado: tempoNovo,
-        prioridade: prioridadeNova
+        prioridade: prioridadeNova,
+        frequenciaDias: frequenciaNova
     });
 }
 
@@ -770,7 +778,6 @@ function renderizarMissoes() {
     if (!container) return;
 
     const hojeStr = obterDataHojeStr();
-
     const fComodo = document.getElementById('filtroFilaComodo') ? document.getElementById('filtroFilaComodo').value : 'TODOS';
     const fPrioridade = document.getElementById('filtroFilaPrioridade') ? document.getElementById('filtroFilaPrioridade').value : 'TODOS';
 
@@ -820,10 +827,12 @@ function renderizarMissoes() {
                     Início: ${horaInicioFmt}
                 </span>
                 <span class="bg-[#090614] text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
-                    Previsão Término: ${previsaoFmt}
+                    Previsão: ${previsaoFmt}
                 </span>
             `;
         }
+
+        let textoFrequencia = m.frequenciaDias === 1 ? 'Diária' : `A cada ${m.frequenciaDias} dias`;
 
         if (!emAndamento) {
             statusBadge = '<span class="text-[9px] bg-purple-500/10 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded font-mono-code">PENDENTE</span>';
@@ -841,7 +850,6 @@ function renderizarMissoes() {
             `;
         } else {
             statusBadge = '<span class="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono-code animate-pulse">EM ANDAMENTO</span>';
-            // Botão de edição omitido aqui (ocultado após iniciar)
             botoesAcao = `
                 <div class="flex items-center space-x-2 mr-2 font-mono-code text-xs text-amber-400 bg-[#090614] px-2.5 py-1 rounded-lg border border-amber-500/30">
                     <i class="fa-solid fa-stopwatch animate-spin"></i>
@@ -864,7 +872,6 @@ function renderizarMissoes() {
                         <div class="flex items-center space-x-2">
                             <h4 class="font-bold text-sm text-white">${m.titulo}</h4>
                             ${statusBadge}
-                            ${m.missaoUnica ? '<span class="text-[9px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded font-mono-code">ÚNICA</span>' : ''}
                         </div>
                         <p class="text-xs text-purple-300/70 mt-0.5">${m.comodo} • ID: ${m.id}</p>
                         
@@ -872,8 +879,11 @@ function renderizarMissoes() {
                             <span class="bg-[#090614] text-purple-300 px-2 py-0.5 rounded border border-purple-900/60">
                                 Prioridade: ${m.prioridade}
                             </span>
+                            <span class="bg-[#090614] text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
+                                🔄 ${textoFrequencia}
+                            </span>
                             <span class="bg-[#090614] text-purple-200 px-2 py-0.5 rounded border border-purple-900/60">
-                                tempo missão: ${m.tempoEstimado} min
+                                tempo: ${m.tempoEstimado} min
                             </span>
                             ${infoDinamicaInicioEPrevisao}
                             <span id="aviso-atraso-${m.id}" class="hidden bg-red-950/40 text-red-400 px-2 py-0.5 rounded border border-red-900/60 animate-pulse font-bold">
@@ -943,7 +953,7 @@ function renderizarHistoricoGeral() {
                             <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
                             <span class="text-[9px] ${corStatus} border px-1.5 py-0.5 rounded font-mono-code">${st}</span>
                         </div>
-                        <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • tempo missão: ${m.tempoEstimado} min</p>
+                        <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • tempo: ${m.tempoEstimado} min</p>
                     </div>
                 </div>
                 <span class="text-[10px] font-mono-code text-purple-300/40">ID: ${m.id}</span>
@@ -994,7 +1004,7 @@ function abrirDetalhesComodo(comodo, statusFiltro = 'Concluído') {
                         <span class="text-xs font-bold text-white">${m.titulo}</span>
                         <span class="text-[10px] font-mono-code ${badgeBg} px-2 py-0.5 rounded border">${st}</span>
                     </div>
-                    <p class="text-[11px] text-purple-300/70 font-mono-code">tempo missão: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
+                    <p class="text-[11px] text-purple-300/70 font-mono-code">tempo: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
                 </div>
             `;
         }).join('');
@@ -1026,9 +1036,7 @@ function atualizarEstatisticasGerais() {
             if (st === 'Concluído') {
                 concluidasTotal++;
                 concluidasPorComodo[comodoKey] = (concluidasPorComodo[comodoKey] || 0) + 1;
-
                 creditosEconomizadosMin += creditosEmSegundos(m['Créditos'] ?? m.creditos) / 60;
-
             } else if (st !== 'Cancelado') {
                 pendentesTotal++;
                 pendentesPorComodo[comodoKey] = (pendentesPorComodo[comodoKey] || 0) + 1;
