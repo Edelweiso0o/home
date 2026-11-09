@@ -53,7 +53,7 @@ function parseSheetRows(rows) {
       if (cell) {
         const val = String(cell).trim();
         tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Frequência (Dias)', 'Prioridade'].includes(val)) {
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora Saída', 'Hora de Início', 'Hora de Término', 'Tempo Trabalhado', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Frequência (Dias)', 'Prioridade', 'Status do Turno'].includes(val)) {
           matches++;
         }
       }
@@ -437,7 +437,7 @@ export default async function handler(req, res) {
           if (linhaTurno !== -1) {
             const horaSaidaStr = data.horaExata || getHoraAtualStr();
             const turnoAlvo = dadosPonto.find(t => t._linha === linhaTurno);
-            const horaEntradaStr = turnoAlvo["Hora Entrada"] || "00:00:00";
+            const horaEntradaStr = turnoAlvo ? (turnoAlvo["Hora Entrada"] || "00:00:00") : "00:00:00";
             
             const [he, me, se] = horaEntradaStr.split(':').map(Number);
             const [hs2, ms2, ss2] = horaSaidaStr.split(':').map(Number);
@@ -451,12 +451,18 @@ export default async function handler(req, res) {
             const tempoTrabalhadoFormatado = `${horasTrab}:${minsTrab}:${segsTrab}`;
 
             let dataUpdates = [];
-            if (colMap["Hora Saída"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] });
-            if (colMap["Status do Turno"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] });
-            if (colMap["Tempo Trabalhado"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
+            if (colMap["Hora Saída"] !== undefined) {
+              dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Hora Saída"] + 1)}${linhaTurno}`, values: [[horaSaidaStr]] });
+            }
+            if (colMap["Status do Turno"] !== undefined) {
+              dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Status do Turno"] + 1)}${linhaTurno}`, values: [["Encerrado"]] });
+            }
+            if (colMap["Tempo Trabalhado"] !== undefined) {
+              dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
+            }
 
             if (dataUpdates.length > 0) {
-              await sheets.spreadsheets.batchUpdate({
+              await sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId,
                 requestBody: { valueInputOption: 'USER_ENTERED', data: dataUpdates }
               });
