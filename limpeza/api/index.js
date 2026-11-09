@@ -53,7 +53,7 @@ function parseSheetRows(rows) {
       if (cell) {
         const val = String(cell).trim();
         tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora Saída', 'Hora de Início', 'Hora de Término', 'Tempo Trabalhado', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Frequência (Dias)', 'Prioridade', 'Status do Turno'].includes(val)) {
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora Saída', 'Hora de Início', 'Hora de Término', 'Tempo Trabalhado', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Tempo Estimado (Minutos)', 'Tempo Médio (Minutos)', 'Frequência (Dias)', 'Prioridade', 'Status do Turno'].includes(val)) {
           matches++;
         }
       }
@@ -107,7 +107,8 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
     obj.data = obj["Data"] || "";
     obj.titulo = obj["Título da Missão"] || "";
     obj.comodo = obj["Cômodo"] || "";
-    obj.tempoEstimado = obj["Tempo Est. (min)"] || "";
+    obj.tempoEstimado = obj["Tempo Estimado (Minutos)"] || obj["Tempo Est. (min)"] || "";
+    obj.tempoMedio = obj["Tempo Médio (Minutos)"] || "";
     obj.prioridade = obj["Prioridade"] || "";
     obj.frequenciaDias = parseInt(obj["Frequência (Dias)"] || 1, 10) || 1;
     obj.status = obj["Status"] !== undefined ? normalizarStatusMissao(obj["Status"]) : obj["Status do Turno"] || "";
@@ -246,7 +247,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     mParsed.dataRows.forEach(mRow => {
       let titulo = mRow[mColMap["Título da Missão"]] || "";
       let comodo = mRow[mColMap["Cômodo"]] || "";
-      let tempoEst = mRow[mColMap["Tempo Est. (min)"]] || "";
+      let tempoEst = mRow[mColMap["Tempo Estimado (Minutos)"]] || mRow[mColMap["Tempo Est. (min)"]] || "";
       let prioridade = mRow[mColMap["Prioridade"]] || "Média";
       let frequenciaDias = parseInt(mRow[mColMap["Frequência (Dias)"]] || 1, 10) || 1;
 
@@ -284,13 +285,13 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (pColMap["Data"] !== undefined) rowArray[pColMap["Data"]] = hojeStr;
             if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
             if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
-            if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
+            if (pColMap["Tempo Estimado (Minutos)"] !== undefined) rowArray[pColMap["Tempo Estimado (Minutos)"]] = tempoEst;
+            else if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
             if (pColMap["Frequência (Dias)"] !== undefined) rowArray[pColMap["Frequência (Dias)"]] = frequenciaDias;
             if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
             if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
             if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
             if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
-            if (pColMap["Crédito"] !== undefined) rowArray[pColMap["Crédito"]] = "";
 
             newRows.push(rowArray);
             currentId++;
@@ -492,7 +493,8 @@ export default async function handler(req, res) {
         if (mColMap["ID"] !== undefined) rowArrayM[mColMap["ID"]] = novoIdBase;
         if (mColMap["Título da Missão"] !== undefined) rowArrayM[mColMap["Título da Missão"]] = data.titulo;
         if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
-        if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
+        if (mColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
+        else if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
         if (mColMap["Frequência (Dias)"] !== undefined) rowArrayM[mColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
         if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
 
@@ -522,11 +524,11 @@ export default async function handler(req, res) {
         if (pColMap["Data"] !== undefined) rowArrayP[pColMap["Data"]] = data.data || hojeStr;
         if (pColMap["Título da Missão"] !== undefined) rowArrayP[pColMap["Título da Missão"]] = data.titulo;
         if (pColMap["Cômodo"] !== undefined) rowArrayP[pColMap["Cômodo"]] = data.comodo;
-        if (pColMap["Tempo Est. (min)"] !== undefined) rowArrayP[pColMap["Tempo Est. (min)"]] = data.tempoEstimado;
+        if (pColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayP[pColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
+        else if (pColMap["Tempo Est. (min)"] !== undefined) rowArrayP[pColMap["Tempo Est. (min)"]] = data.tempoEstimado;
         if (pColMap["Frequência (Dias)"] !== undefined) rowArrayP[pColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
         if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
         if (pColMap["Status"] !== undefined) rowArrayP[pColMap["Status"]] = "Pendente";
-        if (pColMap["Crédito"] !== undefined) rowArrayP[pColMap["Crédito"]] = "";
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -559,7 +561,10 @@ export default async function handler(req, res) {
           let mUpdates = [];
           if (data.titulo && mColMap["Título da Missão"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Título da Missão"] + 1)}${mLinhaAlvo}`, values: [[data.titulo]] });
           if (data.comodo && mColMap["Cômodo"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Cômodo"] + 1)}${mLinhaAlvo}`, values: [[data.comodo]] });
-          if (data.tempoEstimado !== undefined && mColMap["Tempo Est. (min)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Tempo Est. (min)"] + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
+          if (data.tempoEstimado !== undefined) {
+            const colTempoM = mColMap["Tempo Estimado (Minutos)"] !== undefined ? mColMap["Tempo Estimado (Minutos)"] : mColMap["Tempo Est. (min)"];
+            if (colTempoM !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(colTempoM + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
+          }
           if (data.frequenciaDias !== undefined && mColMap["Frequência (Dias)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Frequência (Dias)"] + 1)}${mLinhaAlvo}`, values: [[data.frequenciaDias]] });
           if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
 
@@ -585,9 +590,12 @@ export default async function handler(req, res) {
           let pUpdates = [];
           if (data.titulo && pColMap["Título da Missão"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Título da Missão"] + 1)}${pLinhaAlvo}`, values: [[data.titulo]] });
           if (data.comodo && pColMap["Cômodo"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Cômodo"] + 1)}${pLinhaAlvo}`, values: [[data.comodo]] });
-          if (data.tempoEstimado !== undefined && pColMap["Tempo Est. (min)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Tempo Est. (min)"] + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
+          if (data.tempoEstimado !== undefined) {
+            const colTempoP = pColMap["Tempo Estimado (Minutos)"] !== undefined ? pColMap["Tempo Estimado (Minutos)"] : pColMap["Tempo Est. (min)"];
+            if (colTempoP !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(colTempoP + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
+          }
           if (data.frequenciaDias !== undefined && pColMap["Frequência (Dias)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Frequência (Dias)"] + 1)}${pLinhaAlvo}`, values: [[data.frequenciaDias]] });
-          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
+          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLevel(pColMap["Prioridade"] + 1) || columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
 
           if (pUpdates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -633,33 +641,6 @@ export default async function handler(req, res) {
 
           if (colMap["Hora de Início"] !== undefined && data.horaInicio && !missaoAlvo["Hora de Início"]) {
             dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Hora de Início"] + 1)}${linha}`, values: [[data.horaInicio]] });
-          }
-
-          if (colMap["Créditos"] !== undefined) {
-            const tempoEstMin = parseFloat(missaoAlvo["Tempo Est. (min)"] || data.tempoEst || missaoAlvo.tempoEstimado) || 0;
-            const horaInicioStr = missaoAlvo["Hora de Início"] || data.horaInicio || "";
-
-            let diffSegs = 0;
-            if (horaInicioStr && horaTerminoStr) {
-              const [hi, mi, si] = horaInicioStr.split(':').map(Number);
-              const [ht, mt, st] = horaTerminoStr.split(':').map(Number);
-
-              const totalSegsInicio = (hi || 0) * 3600 + (mi || 0) * 60 + (si || 0);
-              const totalSegsTermino = (ht || 0) * 3600 + (mt || 0) * 60 + (st || 0);
-              const tempoGastoSegs = totalSegsTermino - totalSegsInicio;
-
-              const tempoEstSegs = tempoEstMin * 60;
-              diffSegs = Math.round(tempoEstSegs - tempoGastoSegs);
-            }
-
-            let creditoFormatado = "0s";
-            if (diffSegs > 0) {
-              const mins = Math.floor(diffSegs / 60);
-              const segs = diffSegs % 60;
-              creditoFormatado = mins > 0 ? `${mins}min e ${segs}s` : `${segs}s`;
-            }
-
-            dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Créditos"] + 1)}${linha}`, values: [[creditoFormatado]] });
           }
         } else if (data.estadoMissao === 'Cancelado') {
           if (colMap["Status"] !== undefined) dataUpdates.push({ range: `Progresso Diário!${columnToLetter(colMap["Status"] + 1)}${linha}`, values: [["Cancelado"]] });
