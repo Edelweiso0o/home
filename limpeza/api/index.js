@@ -595,7 +595,7 @@ export default async function handler(req, res) {
             if (colTempoP !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(colTempoP + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
           }
           if (data.frequenciaDias !== undefined && pColMap["Frequência (Dias)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Frequência (Dias)"] + 1)}${pLinhaAlvo}`, values: [[data.frequenciaDias]] });
-          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLevel(pColMap["Prioridade"] + 1) || columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
+          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
 
           if (pUpdates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -606,6 +606,69 @@ export default async function handler(req, res) {
           await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         }
 
+        return res.status(200).json({ status: "success" });
+      }
+
+      if (acao === 'excluirMissao') {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId });
+        const sheetProgresso = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
+        const sheetMissoes = meta.data.sheets.find(s => s.properties.title === "Missões");
+
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+        const pParsed = parseSheetRows(progRes.data.values || []);
+        const pColMap = pParsed.colMap;
+
+        let pLinhaAlvo = -1;
+        let tituloMissao = "";
+        pParsed.dataRows.forEach((row, idx) => {
+          if (String(row[pColMap["ID"]]) === String(data.id)) {
+            pLinhaAlvo = idx + pParsed.headerRowIndex + 2;
+            tituloMissao = String(row[pColMap["Título da Missão"]] || "").trim();
+          }
+        });
+
+        if (pLinhaAlvo !== -1 && sheetProgresso) {
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+              requests: [{
+                deleteDimension: {
+                  range: { sheetId: sheetProgresso.properties.sheetId, dimension: "ROWS", startIndex: pLinhaAlvo - 1, endIndex: pLinhaAlvo }
+                }
+              }]
+            }
+          });
+        }
+
+        const termoTitulo = (data.titulo || tituloMissao).trim().toLowerCase();
+        if (termoTitulo && sheetMissoes) {
+          const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+          const mParsed = parseSheetRows(missoesRes.data.values || []);
+          const mColMap = mParsed.colMap;
+
+          let mLinhaAlvo = -1;
+          mParsed.dataRows.forEach((row, idx) => {
+            if (String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase() === termoTitulo) {
+              mLinhaAlvo = idx + mParsed.headerRowIndex + 2;
+            }
+          });
+
+          if (mLinhaAlvo !== -1) {
+            await sheets.spreadsheets.batchUpdate({
+              spreadsheetId,
+              requestBody: {
+                requests: [{
+                  deleteDimension: {
+                    range: { sheetId: sheetMissoes.properties.sheetId, dimension: "ROWS", startIndex: mLinhaAlvo - 1, endIndex: mLinhaAlvo }
+                  }
+                }]
+              }
+            });
+          }
+        }
+
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
