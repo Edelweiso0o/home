@@ -216,7 +216,7 @@ function normalizarMissaoDaPlanilha(m) {
         data,
         titulo: m['Título da Missão'] ?? m.titulo ?? '',
         comodo: String(m['Cômodo'] ?? m.comodo ?? '').trim(),
-        tempoEstimado: m['Tempo Est. (min)'] ?? m.tempoEstimado ?? 0,
+        tempoEstimado: m['Tempo Estimado (Minutos)'] ?? m['Tempo Est. (min)'] ?? m.tempoEstimado ?? 0,
         frequenciaDias: parseInt(m['Frequência (Dias)'] ?? m.frequenciaDias ?? 1, 10) || 1,
         status,
         estadoMissao: status === 'Em Andamento' ? 'EmAndamento' : status,
@@ -331,7 +331,7 @@ async function alternarPonto() {
     }
 
     const proximoStatus = !estadoPonto.trabalhando;
-    mostrarLoader(true); // Loader instantâneo visível
+    mostrarLoader(true);
 
     if (proximoStatus) {
         const dataAtual = new Date();
@@ -700,10 +700,6 @@ function concluirMissao(id) {
         missao.tempoRealMin = missao.tempoEstimado;
     }
 
-    const segundosGastos = missao.tempoInicioMs ? Math.max(0, Math.floor((dataAtual.getTime() - missao.tempoInicioMs) / 1000)) : Number(missao.tempoEstimado) * 60;
-    const credito = Math.max(0, Math.round(Number(missao.tempoEstimado) * 60 - segundosGastos));
-    missao.creditos = credito >= 60 ? `${Math.floor(credito / 60)}min e ${credito % 60}s` : `${credito}s`;
-    missao['Créditos'] = missao.creditos;
     missao.horaInicio = horaInicioExata;
     missao.horaTermino = horaTerminoExata;
     missao.status = 'Concluído';
@@ -743,12 +739,15 @@ function alternarNaoFazerHoje(id) {
 }
 
 function excluirMissao(id) {
+    const missaoAlvo = encontrarMissaoHoje(id);
+    const titulo = missaoAlvo ? missaoAlvo.titulo : "";
     const hojeStr = obterDataHojeStr();
+
     missoes = missoes.filter(m => !(String(m.id) === String(id) && String(m.data || hojeStr) === hojeStr));
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
     mostrarNotificacao("Excluído", "Missão removida.", "atencao", 2000);
-    sincronizarComServidorEmSegundoPlano('excluirMissao', { id });
+    sincronizarComServidorEmSegundoPlano('excluirMissao', { id, titulo });
 }
 
 function getIconeComodo(comodo) {
