@@ -53,7 +53,7 @@ function parseSheetRows(rows) {
       if (cell) {
         const val = String(cell).trim();
         tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Frequência (Dias)'].includes(val)) {
+        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora de Início', 'Hora de Término', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Frequência (Dias)', 'Prioridade'].includes(val)) {
           matches++;
         }
       }
@@ -74,75 +74,6 @@ function parseSheetRows(rows) {
 
   const dataRows = headerRowIndex !== -1 ? rows.slice(headerRowIndex + 1) : [];
   return { headerRowIndex, colMap, dataRows };
-}
-
-async function garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, sheetName) {
-  try {
-    const meta = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
-    if (!sheetObj) return;
-    const sheetId = sheetObj.properties.sheetId;
-
-    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
-    const rows = res.data.values || [];
-    if (rows.length === 0) return;
-
-    const { headerRowIndex, colMap } = parseSheetRows(rows);
-    if (headerRowIndex === -1) return;
-
-    // Se a coluna Frequência (Dias) não existe na tabela
-    if (colMap["Frequência (Dias)"] === undefined) {
-      const idxTempo = colMap["Tempo Est. (min)"];
-      const idxPrioridade = colMap["Prioridade"];
-
-      let insertIdx = -1;
-      if (idxTempo !== undefined) {
-        insertIdx = idxTempo + 1; // Insere logo após Tempo Est. (min)
-      } else if (idxPrioridade !== undefined) {
-        insertIdx = idxPrioridade; // Insere antes de Prioridade se Tempo Est. não for achado
-      } else {
-        insertIdx = (rows[headerRowIndex] || []).length; // Fallback para o final
-      }
-
-      // 1. Insere uma coluna nova movendo as da direita
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId,
-        requestBody: {
-          requests: [
-            {
-              insertDimension: {
-                range: {
-                  sheetId: sheetId,
-                  dimension: "COLUMNS",
-                  startIndex: insertIdx,
-                  endIndex: insertIdx + 1
-                },
-                inheritFromBefore: true
-              }
-            }
-          ]
-        }
-      });
-
-      // 2. Escreve o cabeçalho e preenche com o valor padrão 1 nas linhas existentes
-      const numLinhasTotais = rows.length;
-      let valoresColuna = [["Frequência (Dias)"]];
-
-      for (let i = headerRowIndex + 1; i < numLinhasTotais; i++) {
-        valoresColuna.push([1]);
-      }
-
-      const letraCol = columnToLetter(insertIdx + 1);
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `${sheetName}!${letraCol}${headerRowIndex + 1}:${letraCol}${headerRowIndex + valoresColuna.length}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: valoresColuna }
-      });
-    }
-  } catch (e) {
-    console.error(`Erro ao garantir coluna de frequência entre Tempo e Prioridade em ${sheetName}:`, e);
-  }
 }
 
 function normalizarStatusMissao(valor) {
@@ -283,9 +214,6 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
-    await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Missões");
-    await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Progresso Diário");
-
     const hojeStr = getDataHojeStr();
     const hojeMs = parseDataPtBrParaMs(hojeStr);
     
@@ -541,9 +469,6 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'adicionarMissao') {
-        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Missões");
-        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Progresso Diário");
-
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
@@ -609,9 +534,6 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'editarMissao') {
-        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Missões");
-        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Progresso Diário");
-
         const tituloBusca = String(data.tituloOriginal || data.titulo).trim().toLowerCase();
 
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
