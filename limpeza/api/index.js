@@ -66,14 +66,83 @@ function parseSheetRows(rows) {
   }
 
   if (headerRowIndex === -1 && rows.length >= 2) {
-    headerRowIndex = 1;
-    rows[1].forEach((h, idx) => {
+    headerRowIndex = 0;
+    rows[0].forEach((h, idx) => {
       if (h) colMap[h.trim()] = idx;
     });
   }
 
   const dataRows = headerRowIndex !== -1 ? rows.slice(headerRowIndex + 1) : [];
   return { headerRowIndex, colMap, dataRows };
+}
+
+async function garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, sheetName) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetObj = meta.data.sheets.find(s => s.properties.title === sheetName);
+    if (!sheetObj) return;
+    const sheetId = sheetObj.properties.sheetId;
+
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const rows = res.data.values || [];
+    if (rows.length === 0) return;
+
+    const { headerRowIndex, colMap } = parseSheetRows(rows);
+    if (headerRowIndex === -1) return;
+
+    // Se a coluna Frequência (Dias) não existe na tabela
+    if (colMap["Frequência (Dias)"] === undefined) {
+      const idxTempo = colMap["Tempo Est. (min)"];
+      const idxPrioridade = colMap["Prioridade"];
+
+      let insertIdx = -1;
+      if (idxTempo !== undefined) {
+        insertIdx = idxTempo + 1; // Insere logo após Tempo Est. (min)
+      } else if (idxPrioridade !== undefined) {
+        insertIdx = idxPrioridade; // Insere antes de Prioridade se Tempo Est. não for achado
+      } else {
+        insertIdx = (rows[headerRowIndex] || []).length; // Fallback para o final
+      }
+
+      // 1. Insere uma coluna nova movendo as da direita
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              insertDimension: {
+                range: {
+                  sheetId: sheetId,
+                  dimension: "COLUMNS",
+                  startIndex: insertIdx,
+                  endIndex: insertIdx + 1
+                },
+                inheritFromBefore: true
+              }
+            }
+          ]
+        }
+      });
+
+      // 2. Escreve o cabeçalho e preenche com o valor padrão 1 nas linhas existentes
+      const numLinhasTotais = rows.length;
+      let valoresColuna = [["Frequência (Dias)"]];
+
+      for (let i = headerRowIndex + 1; i < numLinhasTotais; i++) {
+        valoresColuna.push([1]);
+      }
+
+      const letraCol = columnToLetter(insertIdx + 1);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!${letraCol}${headerRowIndex + 1}:${letraCol}${headerRowIndex + valoresColuna.length}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: valoresColuna }
+      });
+    }
+  } catch (e) {
+    console.error(`Erro ao garantir coluna de frequência entre Tempo e Prioridade em ${sheetName}:`, e);
+  }
 }
 
 function normalizarStatusMissao(valor) {
@@ -214,6 +283,9 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
+    await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Missões");
+    await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Progresso Diário");
+
     const hojeStr = getDataHojeStr();
     const hojeMs = parseDataPtBrParaMs(hojeStr);
     
@@ -257,7 +329,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         });
 
         if (!jaExisteHoje) {
-          // Verificar inteligência de intervalo: quando foi a última vez que essa missão foi concluída?
           let ultimaConclusaoMs = 0;
           pData.forEach(pRow => {
             const tVal = pRow[pColMap["Título da Missão"]] || "";
@@ -273,7 +344,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
           if (ultimaConclusaoMs > 0 && frequenciaDias > 1) {
             const diffDias = Math.round((hojeMs - ultimaConclusaoMs) / (1000 * 60 * 60 * 24));
             if (diffDias < frequenciaDias) {
-              deveLancar = false; // Ainda não atingiu o intervalo configurado
+              deveLancar = false;
             }
           }
 
@@ -286,8 +357,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
             if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
             if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
-            if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
             if (pColMap["Frequência (Dias)"] !== undefined) rowArray[pColMap["Frequência (Dias)"]] = frequenciaDias;
+            if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
             if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
             if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
             if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
@@ -307,8 +378,10 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-      await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
     }
+
+    await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
+    await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
   } catch (e) {
     console.error("Erro ao sincronizar missões do dia:", e);
   }
@@ -455,7 +528,7 @@ export default async function handler(req, res) {
             if (colMap["Tempo Trabalhado"] !== undefined) dataUpdates.push({ range: `Registro de Ponto!${columnToLetter(colMap["Tempo Trabalhado"] + 1)}${linhaTurno}`, values: [[tempoTrabalhadoFormatado]] });
 
             if (dataUpdates.length > 0) {
-              await sheets.spreadsheets.values.batchUpdate({
+              await sheets.spreadsheets.batchUpdate({
                 spreadsheetId,
                 requestBody: { valueInputOption: 'USER_ENTERED', data: dataUpdates }
               });
@@ -468,6 +541,9 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'adicionarMissao') {
+        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Missões");
+        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Progresso Diário");
+
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
@@ -486,8 +562,8 @@ export default async function handler(req, res) {
         if (mColMap["Título da Missão"] !== undefined) rowArrayM[mColMap["Título da Missão"]] = data.titulo;
         if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
         if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
-        if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
         if (mColMap["Frequência (Dias)"] !== undefined) rowArrayM[mColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
+        if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
 
         await sheets.spreadsheets.values.append({
           spreadsheetId,
@@ -516,8 +592,8 @@ export default async function handler(req, res) {
         if (pColMap["Título da Missão"] !== undefined) rowArrayP[pColMap["Título da Missão"]] = data.titulo;
         if (pColMap["Cômodo"] !== undefined) rowArrayP[pColMap["Cômodo"]] = data.comodo;
         if (pColMap["Tempo Est. (min)"] !== undefined) rowArrayP[pColMap["Tempo Est. (min)"]] = data.tempoEstimado;
-        if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
         if (pColMap["Frequência (Dias)"] !== undefined) rowArrayP[pColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
+        if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
         if (pColMap["Status"] !== undefined) rowArrayP[pColMap["Status"]] = "Pendente";
         if (pColMap["Crédito"] !== undefined) rowArrayP[pColMap["Crédito"]] = "";
 
@@ -533,6 +609,9 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'editarMissao') {
+        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Missões");
+        await garantirColunaFrequenciaEntreTempoEPrioridade(sheets, spreadsheetId, "Progresso Diário");
+
         const tituloBusca = String(data.tituloOriginal || data.titulo).trim().toLowerCase();
 
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
@@ -553,8 +632,8 @@ export default async function handler(req, res) {
           if (data.titulo && mColMap["Título da Missão"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Título da Missão"] + 1)}${mLinhaAlvo}`, values: [[data.titulo]] });
           if (data.comodo && mColMap["Cômodo"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Cômodo"] + 1)}${mLinhaAlvo}`, values: [[data.comodo]] });
           if (data.tempoEstimado !== undefined && mColMap["Tempo Est. (min)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Tempo Est. (min)"] + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
-          if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
           if (data.frequenciaDias !== undefined && mColMap["Frequência (Dias)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Frequência (Dias)"] + 1)}${mLinhaAlvo}`, values: [[data.frequenciaDias]] });
+          if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
 
           if (mUpdates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -579,8 +658,8 @@ export default async function handler(req, res) {
           if (data.titulo && pColMap["Título da Missão"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Título da Missão"] + 1)}${pLinhaAlvo}`, values: [[data.titulo]] });
           if (data.comodo && pColMap["Cômodo"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Cômodo"] + 1)}${pLinhaAlvo}`, values: [[data.comodo]] });
           if (data.tempoEstimado !== undefined && pColMap["Tempo Est. (min)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Tempo Est. (min)"] + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
-          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
           if (data.frequenciaDias !== undefined && pColMap["Frequência (Dias)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Frequência (Dias)"] + 1)}${pLinhaAlvo}`, values: [[data.frequenciaDias]] });
+          if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
 
           if (pUpdates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
