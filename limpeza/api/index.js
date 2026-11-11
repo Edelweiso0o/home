@@ -524,8 +524,10 @@ export default async function handler(req, res) {
           if (mColMap["ID"] !== undefined) rowArrayM[mColMap["ID"]] = novoIdBase;
           if (mColMap["Título da Missão"] !== undefined) rowArrayM[mColMap["Título da Missão"]] = data.titulo;
           if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
-          if (mColMap["Tempo Médio (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Médio (Minutos)"]] = data.tempoEstimado;
-          else if (mColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
+          // "Tempo Médio (Minutos)" tem formula (MAP/LAMBDA) e NAO deve ser escrito.
+          // O tempo informado vai sempre para "Tempo Estimado (Minutos)".
+          if (mColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
+          else if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
           if (mColMap["Frequência (Dias)"] !== undefined) rowArrayM[mColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
           if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
 
@@ -605,8 +607,9 @@ export default async function handler(req, res) {
           if (data.titulo && mColMap["Título da Missão"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Título da Missão"] + 1)}${mLinhaAlvo}`, values: [[data.titulo]] });
           if (data.comodo && mColMap["Cômodo"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Cômodo"] + 1)}${mLinhaAlvo}`, values: [[data.comodo]] });
           if (data.tempoEstimado !== undefined) {
-            const colTempoM = mColMap["Tempo Médio (Minutos)"] !== undefined ? mColMap["Tempo Médio (Minutos)"] : (mColMap["Tempo Estimado (Minutos)"] !== undefined ? mColMap["Tempo Estimado (Minutos)"] : mColMap["Tempo Est. (min)"]);
-            if (colTempoM !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(colTempoM + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
+            // "Tempo Médio (Minutos)" tem formula (MAP/LAMBDA) e NAO deve ser escrito.
+            const colTempoEst = mColMap["Tempo Estimado (Minutos)"] !== undefined ? mColMap["Tempo Estimado (Minutos)"] : mColMap["Tempo Est. (min)"];
+            if (colTempoEst !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(colTempoEst + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
           }
           if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
 
