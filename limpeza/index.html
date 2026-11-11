@@ -141,6 +141,10 @@
                         <i class="fa-solid fa-clone text-purple-400"></i>
                         <span>Repetir Missão</span>
                     </button>
+                    <button onclick="abrirModalGerenciarLinhas()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-red-900/30 text-red-300 border border-red-900/60 transition flex items-center space-x-1.5" title="Ver e excluir linhas da planilha">
+                        <i class="fa-solid fa-table-list text-red-400"></i>
+                        <span>Linhas</span>
+                    </button>
                     <button onclick="abrirModalNovaMissao()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white transition flex items-center space-x-1.5 shadow-md" title="Adicionar nova missão">
                         <i class="fa-solid fa-plus"></i>
                         <span>Adicionar Missão</span>
@@ -331,6 +335,48 @@
         </div>
     </div>
 
-    <script src="js/main.js?v=2.1.0"></script>
+    <!-- ================= PAINEL DE LINHAS DA PLANILHA ================= -->
+    <div id="modalGerenciarLinhas" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-purple-900/50 pb-3 shrink-0">
+                <div>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">
+                        <i class="fa-solid fa-table-list text-red-400 mr-2"></i>Linhas da Planilha
+                    </h3>
+                    <p class="text-[11px] text-purple-300/60 mt-1">Selecione as linhas que deseja excluir. A exclusão é permanente.</p>
+                </div>
+                <button onclick="fecharModalGerenciarLinhas()" class="text-purple-300/50 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Abas -->
+            <div id="abasPainelLinhas" class="flex flex-wrap gap-2 shrink-0"></div>
+
+            <!-- Barra de acoes -->
+            <div class="flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="buscaLinhas" oninput="filtrarLinhasPainel()" placeholder="Filtrar..." class="bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-1.5 text-xs text-white placeholder-purple-400/40 w-48">
+                    <button onclick="alternarTodasLinhas()" id="btnMarcarTodas" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition">
+                        Marcar todas
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span id="contadorSelecionadas" class="text-xs font-mono-code text-purple-300/60">0 selecionada(s)</span>
+                    <button onclick="excluirLinhasSelecionadas()" id="btnExcluirLinhas" disabled class="px-4 py-1.5 rounded-xl text-xs font-mono-code bg-red-600 hover:bg-red-500 text-white transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center space-x-1.5">
+                        <i class="fa-solid fa-trash"></i>
+                        <span>Excluir selecionadas</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabela -->
+            <div id="tabelaLinhasContainer" class="flex-grow overflow-auto border border-purple-900/40 rounded-xl">
+                <p class="text-xs text-purple-300/50 p-6 text-center">Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js?v=2.2.0"></script>
 </body>
 </html>
