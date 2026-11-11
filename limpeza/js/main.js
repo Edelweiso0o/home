@@ -176,6 +176,8 @@ function processarCicloSegundo() {
 document.addEventListener('DOMContentLoaded', async () => {
     limparChaveAntiga();
 
+    preencherSelectsComodo();
+
     carregarDadosLocalStorage();
     renderizarVisaoAtual();
     iniciarRelogio();
@@ -403,6 +405,53 @@ async function excluirLinhasSelecionadas() {
         console.error('Erro ao excluir linhas:', err);
         mostrarNotificacao("Erro", "Falha de conexão ao excluir.", "erro", 3000);
     }
+}
+
+// =====================================================================
+// COMODOS
+// Lista unica. Para adicionar um comodo novo, basta incluir aqui:
+// os quatro selects do HTML sao preenchidos a partir desta lista.
+// =====================================================================
+const COMODOS = ['Quarto', 'Banheiro', 'Cozinha', 'Sala', 'Lavanderia', 'Quintal', 'Corredor'];
+
+function preencherSelectsComodo() {
+    COMODOS.forEach((comodo, idx) => {
+        // 1) Filtro da Fila de Missoes
+        const filtroFila = document.getElementById('filtroFilaComodo');
+        if (filtroFila && !filtroFila.querySelector('option[value="' + comodo + '"]')) {
+            const opt = document.createElement('option');
+            opt.value = comodo;
+            opt.textContent = comodo;
+            filtroFila.appendChild(opt);
+        }
+
+        // 2) Filtro do Historico
+        const filtroHist = document.getElementById('filtroHistoricoComodo');
+        if (filtroHist && !filtroHist.querySelector('option[value="' + comodo + '"]')) {
+            const opt = document.createElement('option');
+            opt.value = comodo;
+            opt.textContent = comodo;
+            filtroHist.appendChild(opt);
+        }
+
+        // 3) Modal Nova Missao (sem opcao "TODOS")
+        const selectNova = document.getElementById('selectComodo');
+        if (selectNova && !selectNova.querySelector('option[value="' + comodo + '"]')) {
+            const opt = document.createElement('option');
+            opt.value = comodo;
+            opt.textContent = comodo;
+            selectNova.appendChild(opt);
+        }
+
+        // 4) Modal Editar Missao
+        const selectEdit = document.getElementById('editSelectComodo');
+        if (selectEdit && !selectEdit.querySelector('option[value="' + comodo + '"]')) {
+            const opt = document.createElement('option');
+            opt.value = comodo;
+            opt.textContent = comodo;
+            selectEdit.appendChild(opt);
+        }
+    });
 }
 
 // =====================================================================
