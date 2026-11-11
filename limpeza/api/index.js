@@ -698,24 +698,49 @@ export default async function handler(req, res) {
           }
         });
 
-        if (pLinhaAlvo !== -1 && sheetProgresso) {
-          await sheets.spreadsheets.batchUpdate({
-            spreadsheetId,
-            requestBody: {
-              requests: [{
-                deleteDimension: {
-                  range: { sheetId: sheetProgresso.properties.sheetId, dimension: "ROWS", startIndex: pLinhaAlvo - 1, endIndex: pLinhaAlvo }
-                }
-              }]
+        if (pLinhaAlvo === -1) {
+          return res.status(404).json({ status: 'error', message: 'Missão não encontrada no Progresso Diário.' });
+        }
+
+        // 1. Localiza o cadastro correspondente na aba Missões, pelo titulo
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
+        const mParsed = parseSheetRows(missoesRes.data.values || []);
+        const mColMap = mParsed.colMap;
+
+        let mLinhaAlvo = -1;
+        if (tituloMissao && mColMap["Título da Missão"] !== undefined) {
+          const tituloBusca = tituloMissao.toLowerCase();
+          mParsed.dataRows.forEach((row, idx) => {
+            const tVal = String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase();
+            if (tVal === tituloBusca) {
+              mLinhaAlvo = idx + mParsed.headerRowIndex + 2;
             }
           });
         }
 
-        // Nota: A exclusão de uma missão do progresso diário não deve apagar o cadastro principal na aba Missões, a menos que explicitamente desejado. Mantemos a aba Missões intacta para garantir unicidade.
+        // 2. Remove do Progresso Diario e de Missoes na mesma chamada.
+        //    Indices de exclusao sao 0-based e ordenados do maior para o menor,
+        //    para que apagar uma linha nao desloque a outra.
+        const alvos = [];
+        if (sheetProgresso) alvos.push({ sheetId: sheetProgresso.properties.sheetId, linha: pLinhaAlvo });
+        if (mLinhaAlvo !== -1 && sheetMissoes) alvos.push({ sheetId: sheetMissoes.properties.sheetId, linha: mLinhaAlvo });
+        alvos.sort((a, b) => b.linha - a.linha);
+
+        const requests = alvos.map(a => ({
+          deleteDimension: {
+            range: { sheetId: a.sheetId, dimension: "ROWS", startIndex: a.linha - 1, endIndex: a.linha }
+          }
+        }));
+
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
 
         await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
-        return res.status(200).json({ status: "success" });
+        return res.status(200).json({
+          status: "success",
+          removidoDoProgresso: true,
+          removidoDoCadastro: mLinhaAlvo !== -1
+        });
       }
 
       if (acao === 'atualizarEstadoMissao' || acao === 'concluirMissao') {
