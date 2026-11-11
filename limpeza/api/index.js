@@ -244,43 +244,50 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     let newRows = [];
     let currentId = maxId + 1;
 
+    // Controlar para garantir que missões repetidas no mesmo dia sejam únicas na aba Progresso Diário
+    const titulosAdicionadosHoje = new Set(missoesHojeNaPlanilha.map(r => String(r[pColMap["Título da Missão"]] || "").trim().toLowerCase()));
+
     mParsed.dataRows.forEach(mRow => {
       let titulo = mRow[mColMap["Título da Missão"]] || "";
       let comodo = mRow[mColMap["Cômodo"]] || "";
-      let tempoEst = mRow[mColMap["Tempo Estimado (Minutos)"]] || mRow[mColMap["Tempo Est. (min)"]] || "";
       let tempoMedio = mRow[mColMap["Tempo Médio (Minutos)"]] || "";
       let prioridade = mRow[mColMap["Prioridade"]] || "Média";
       let frequenciaDias = parseInt(mRow[mColMap["Frequência (Dias)"]] || 1, 10) || 1;
 
       if (titulo) {
-        const jaExisteHoje = missoesHojeNaPlanilha.some(pRow => {
-          const tVal = pRow[pColMap["Título da Missão"]] || "";
-          return String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase();
-        });
-
-        if (!jaExisteHoje) {
+        const tituloLower = String(titulo).trim().toLowerCase();
+        if (!titulosAdicionadosHoje.has(tituloLower)) {
           let ultimaConclusaoMs = 0;
+          let ultimoTempoUsado = "";
+
           pData.forEach(pRow => {
             const tVal = pRow[pColMap["Título da Missão"]] || "";
             const stVal = normalizarStatusMissao(pRow[pColMap["Status"]]);
             const dataVal = pRow[pColMap["Data"]] || "";
-            if (String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase() && stVal === 'Concluído') {
+            if (String(tVal).trim().toLowerCase() === tituloLower && stVal === 'Concluído') {
               const dMs = parseDataPtBrParaMs(dataVal);
-              if (dMs > ultimaConclusaoMs) ultimaConclusaoMs = dMs;
+              if (dMs >= ultimaConclusaoMs) {
+                ultimaConclusaoMs = dMs;
+                const tempoProg = pRow[pColMap["Tempo Estimado (Minutos)"]] || pRow[pColMap["Tempo Est. (min)"]] || "";
+                if (tempoProg !== "") {
+                  ultimoTempoUsado = tempoProg;
+                }
+              }
             }
           });
 
-          // Pega o tempo médio da aba missões se houver, caso contrário usa o tempo estimado
+          // Definir o tempo: prioriza o tempo da última vez feita, senão pega direto da coluna "Tempo Médio (Minutos)" da aba Missões
           let tempoParaLancar = "";
-          const tMedioNum = parseFloat(tempoMedio);
-          const tEstNum = parseFloat(tempoEst);
-
-          if (!isNaN(tMedioNum) && tMedioNum > 0) {
-            tempoParaLancar = tMedioNum;
-          } else if (!isNaN(tEstNum) && tEstNum > 0) {
-            tempoParaLancar = tEstNum;
+          if (ultimoTempoUsado !== "") {
+            tempoParaLancar = ultimoTempoUsado;
           } else {
-            tempoParaLancar = 15;
+            const tMedioNum = parseFloat(tempoMedio);
+            if (!isNaN(tMedioNum) && tMedioNum > 0) {
+              tempoParaLancar = tMedioNum;
+            } else {
+              const tempoEst = mRow[mColMap["Tempo Estimado (Minutos)"]] || mRow[mColMap["Tempo Est. (min)"]] || "";
+              tempoParaLancar = tempoEst || 15;
+            }
           }
 
           let deveLancar = true;
@@ -308,6 +315,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
 
             newRows.push(rowArray);
+            titulosAdicionadosHoje.add(tituloLower);
             currentId++;
           }
         }
@@ -490,39 +498,60 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'adicionarMissao') {
+        // CORREÇÃO: Repetir/adicionar missão não deve criar nova linha na aba "Missões", apenas lançar no "Progresso Diário" (ou se for criada via interface do usuário explicitamente, mas aqui na sincronização e repetição tratamos de forma única).
+        // Vamos verificar se a missão já existe na aba "Missões" antes de inserir, evitando duplicação na aba Missões.
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
 
-        let maxIdMissao = 999;
-        mParsed.dataRows.forEach(r => {
-          let idVal = parseInt(r[mColMap["ID"]], 10);
-          if (!isNaN(idVal) && idVal > maxIdMissao) maxIdMissao = idVal;
-        });
-        const novoIdBase = maxIdMissao + 1;
-        const nextRowMissao = (missoesRes.data.values || []).length + 1;
+        const tituloDesejado = String(data.titulo || "").trim();
+        const tituloDesejadoLower = tituloDesejado.toLowerCase();
 
-        let maxColM = Math.max(...Object.values(mColMap), 0);
-        let rowArrayM = new Array(maxColM + 1).fill("");
-        if (mColMap["ID"] !== undefined) rowArrayM[mColMap["ID"]] = novoIdBase;
-        if (mColMap["Título da Missão"] !== undefined) rowArrayM[mColMap["Título da Missão"]] = data.titulo;
-        if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
-        if (mColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
-        else if (mColMap["Tempo Est. (min)"] !== undefined) rowArrayM[mColMap["Tempo Est. (min)"]] = data.tempoEstimado;
-        if (mColMap["Frequência (Dias)"] !== undefined) rowArrayM[mColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
-        if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
+        let missaoExistenteNaAba = mParsed.dataRows.find(r => String(r[mColMap["Título da Missão"]] || "").trim().toLowerCase() === tituloDesejadoLower);
 
-        await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range: `Missões!A${nextRowMissao}`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [rowArrayM] }
-        });
-        await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
+        if (!missaoExistenteNaAba) {
+          // Só adiciona na aba Missões se realmente não existir nenhuma com esse nome (garantindo que missões repetidas sejam únicas)
+          let maxIdMissao = 999;
+          mParsed.dataRows.forEach(r => {
+            let idVal = parseInt(r[mColMap["ID"]], 10);
+            if (!isNaN(idVal) && idVal > maxIdMissao) maxIdMissao = idVal;
+          });
+          const novoIdBase = maxIdMissao + 1;
+          const nextRowMissao = (missoesRes.data.values || []).length + 1;
+
+          let maxColM = Math.max(...Object.values(mColMap), 0);
+          let rowArrayM = new Array(maxColM + 1).fill("");
+          if (mColMap["ID"] !== undefined) rowArrayM[mColMap["ID"]] = novoIdBase;
+          if (mColMap["Título da Missão"] !== undefined) rowArrayM[mColMap["Título da Missão"]] = data.titulo;
+          if (mColMap["Cômodo"] !== undefined) rowArrayM[mColMap["Cômodo"]] = data.comodo;
+          if (mColMap["Tempo Médio (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Médio (Minutos)"]] = data.tempoEstimado;
+          else if (mColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayM[mColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
+          if (mColMap["Frequência (Dias)"] !== undefined) rowArrayM[mColMap["Frequência (Dias)"]] = data.frequenciaDias || 1;
+          if (mColMap["Prioridade"] !== undefined) rowArrayM[mColMap["Prioridade"]] = data.prioridade;
+
+          await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `Missões!A${nextRowMissao}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [rowArrayM] }
+          });
+          await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
+        }
 
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
+
+        // Verificar se já existe no Progresso Diário para o dia atual para evitar duplicatas
+        const dataAlvo = data.data || hojeStr;
+        const jaExisteProgresso = pParsed.dataRows.some(r => {
+          return String(r[pColMap["Data"]] || "").trim() === String(dataAlvo).trim() &&
+                 String(r[pColMap["Título da Missão"]] || "").trim().toLowerCase() === tituloDesejadoLower;
+        });
+
+        if (jaExisteProgresso) {
+          return res.status(200).json({ status: "success", message: "Missão já existe no progresso diário de hoje." });
+        }
 
         let maxIdProg = 999;
         pParsed.dataRows.forEach(r => {
@@ -535,7 +564,7 @@ export default async function handler(req, res) {
         let maxColP = Math.max(...Object.values(pColMap), 0);
         let rowArrayP = new Array(maxColP + 1).fill("");
         if (pColMap["ID"] !== undefined) rowArrayP[pColMap["ID"]] = novoIdProg;
-        if (pColMap["Data"] !== undefined) rowArrayP[pColMap["Data"]] = data.data || hojeStr;
+        if (pColMap["Data"] !== undefined) rowArrayP[pColMap["Data"]] = dataAlvo;
         if (pColMap["Título da Missão"] !== undefined) rowArrayP[pColMap["Título da Missão"]] = data.titulo;
         if (pColMap["Cômodo"] !== undefined) rowArrayP[pColMap["Cômodo"]] = data.comodo;
         if (pColMap["Tempo Estimado (Minutos)"] !== undefined) rowArrayP[pColMap["Tempo Estimado (Minutos)"]] = data.tempoEstimado;
@@ -576,7 +605,7 @@ export default async function handler(req, res) {
           if (data.titulo && mColMap["Título da Missão"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Título da Missão"] + 1)}${mLinhaAlvo}`, values: [[data.titulo]] });
           if (data.comodo && mColMap["Cômodo"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Cômodo"] + 1)}${mLinhaAlvo}`, values: [[data.comodo]] });
           if (data.tempoEstimado !== undefined) {
-            const colTempoM = mColMap["Tempo Estimado (Minutos)"] !== undefined ? mColMap["Tempo Estimado (Minutos)"] : mColMap["Tempo Est. (min)"];
+            const colTempoM = mColMap["Tempo Médio (Minutos)"] !== undefined ? mColMap["Tempo Médio (Minutos)"] : (mColMap["Tempo Estimado (Minutos)"] !== undefined ? mColMap["Tempo Estimado (Minutos)"] : mColMap["Tempo Est. (min)"]);
             if (colTempoM !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(colTempoM + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
           }
           if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
@@ -682,32 +711,7 @@ export default async function handler(req, res) {
           });
         }
 
-        const termoTitulo = (data.titulo || tituloMissao).trim().toLowerCase();
-        if (termoTitulo && sheetMissoes) {
-          const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
-          const mParsed = parseSheetRows(missoesRes.data.values || []);
-          const mColMap = mParsed.colMap;
-
-          let mLinhaAlvo = -1;
-          mParsed.dataRows.forEach((row, idx) => {
-            if (String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase() === termoTitulo) {
-              mLinhaAlvo = idx + mParsed.headerRowIndex + 2;
-            }
-          });
-
-          if (mLinhaAlvo !== -1) {
-            await sheets.spreadsheets.batchUpdate({
-              spreadsheetId,
-              requestBody: {
-                requests: [{
-                  deleteDimension: {
-                    range: { sheetId: sheetMissoes.properties.sheetId, dimension: "ROWS", startIndex: mLinhaAlvo - 1, endIndex: mLinhaAlvo }
-                  }
-                }]
-              }
-            });
-          }
-        }
+        // Nota: A exclusão de uma missão do progresso diário não deve apagar o cadastro principal na aba Missões, a menos que explicitamente desejado. Mantemos a aba Missões intacta para garantir unicidade.
 
         await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
