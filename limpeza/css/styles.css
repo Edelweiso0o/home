@@ -117,4 +117,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 /* Garante que o conteudo fique acima do fundo animado */
-body > header, body > main { position: relative; z-index: 1; }
+body > header, body > main { position: relative; z-index: 2; }
+
+/* O fundo animado fica sempre atras de tudo */
+#fundoFolga { z-index: 0 !important; }
+#fundoFolga .particula-folga { opacity: 0.35; }
