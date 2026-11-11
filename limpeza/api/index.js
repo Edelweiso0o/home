@@ -329,10 +329,12 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
-    }
 
-    await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
-    await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
+      // So formata quando linhas novas foram criadas. Sem linha nova, o formato
+      // ja esta gravado na planilha e reaplicar seria trabalho sem resultado.
+      await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
+      await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
+    }
   } catch (e) {
     console.error("Erro ao sincronizar missões do dia:", e);
   }
@@ -619,7 +621,6 @@ export default async function handler(req, res) {
               requestBody: { valueInputOption: 'USER_ENTERED', data: mUpdates }
             });
           }
-          await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
         const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
@@ -647,7 +648,6 @@ export default async function handler(req, res) {
               requestBody: { valueInputOption: 'USER_ENTERED', data: pUpdates }
             });
           }
-          await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         }
 
         return res.status(200).json({ status: "success" });
@@ -677,7 +677,6 @@ export default async function handler(req, res) {
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [[novaFreq]] }
           });
-          await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
         return res.status(200).json({ status: "success" });
@@ -790,7 +789,6 @@ export default async function handler(req, res) {
           });
         }
 
-        await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success" });
       }
 
