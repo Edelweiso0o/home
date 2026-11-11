@@ -1805,40 +1805,57 @@ function atualizarPainelFolga() {
         btnTestar.title = emTeste ? 'Encerrar o teste de folga' : 'Testar o dia de folga agora';
     }
 
+    const fundo = document.getElementById('fundoFolga');
+
     if (ehFolgaVisivel) {
         if (banner) banner.classList.remove('hidden');
+        if (fundo) fundo.classList.remove('hidden');
         if (card) card.classList.add('card-folga-ativa');
         iniciarParticulasFolga();
         if (somFolgaLigado) tocarSomFolga();
     } else {
         if (banner) banner.classList.add('hidden');
+        if (fundo) fundo.classList.add('hidden');
         if (card) card.classList.remove('card-folga-ativa');
         pararParticulasFolga();
     }
 }
 
 function iniciarParticulasFolga() {
-    const alvo = document.getElementById('particulasFolga');
-    if (!alvo || particulasRodando) return;
+    const alvoBanner = document.getElementById('particulasFolga');
+    const alvoFundo = document.getElementById('particulasFundoFolga');
+    if ((!alvoBanner && !alvoFundo) || particulasRodando) return;
     particulasRodando = true;
 
-    const simbolos = ['🌴', '🌞', '🍃', '✨', '🌊', '☀️'];
+    const simbolos = ['🌴', '🌞', '🍃', '✨', '🌊', '☀️', '🥥', '🐚'];
 
-    const criar = () => {
+    const criar = (alvo, escala) => {
         if (!particulasRodando || !alvo) return;
         const p = document.createElement('span');
         p.className = 'particula-folga';
         p.innerText = simbolos[Math.floor(Math.random() * simbolos.length)];
         p.style.left = (Math.random() * 96) + '%';
-        p.style.animationDuration = (3.5 + Math.random() * 2.5) + 's';
-        p.style.animationDelay = (Math.random() * 1.2) + 's';
-        p.style.fontSize = (11 + Math.random() * 8) + 'px';
+        p.style.animationDuration = (escala.durMin + Math.random() * escala.durVar) + 's';
+        p.style.animationDelay = (Math.random() * 1.4) + 's';
+        p.style.fontSize = (escala.fontMin + Math.random() * escala.fontVar) + 'px';
+        if (escala.altura) p.style.setProperty('--subida', escala.altura);
+        if (escala.opacidade) p.style.opacity = escala.opacidade;
         alvo.appendChild(p);
-        setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, 7000);
+        setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, 9000);
     };
 
-    for (let i = 0; i < 6; i++) setTimeout(criar, i * 260);
-    window._folgaInterval = setInterval(criar, 900);
+    const noBanner = { durMin: 3.5, durVar: 2.5, fontMin: 11, fontVar: 8, altura: '-90px' };
+    const noFundo  = { durMin: 9, durVar: 6, fontMin: 16, fontVar: 20, altura: '-100vh' };
+
+    const tick = () => {
+        if (!particulasRodando) return;
+        criar(alvoBanner, noBanner);
+        criar(alvoFundo, noFundo);
+        if (Math.random() > 0.5) criar(alvoFundo, noFundo);
+    };
+
+    for (let i = 0; i < 5; i++) setTimeout(tick, i * 280);
+    window._folgaInterval = setInterval(tick, 850);
 }
 
 function pararParticulasFolga() {
@@ -1847,8 +1864,10 @@ function pararParticulasFolga() {
         clearInterval(window._folgaInterval);
         window._folgaInterval = null;
     }
-    const alvo = document.getElementById('particulasFolga');
-    if (alvo) alvo.innerHTML = '';
+    const alvoBanner = document.getElementById('particulasFolga');
+    const alvoFundo = document.getElementById('particulasFundoFolga');
+    if (alvoBanner) alvoBanner.innerHTML = '';
+    if (alvoFundo) alvoFundo.innerHTML = '';
 }
 
 // Som relaxante gerado na hora (sem arquivo). Acorde suave com fade-in/out.
