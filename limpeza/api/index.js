@@ -124,7 +124,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
     if (!sheetObj) return;
     const sheetId = sheetObj.properties.sheetId;
 
-    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:Z500` });
+    const resVals = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A:Z` });
     const rows = resVals.data.values || [];
     if (rows.length === 0) return;
 
@@ -218,12 +218,12 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     const hojeStr = getDataHojeStr();
     const hojeMs = parseDataPtBrParaMs(hojeStr);
     
-    const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z100" });
+    const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
     const mParsed = parseSheetRows(missoesRes.data.values || []);
     if (mParsed.dataRows.length === 0) return;
     const mColMap = mParsed.colMap;
 
-    const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+    const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
     const pRows = progRes.data.values || [];
     const pParsed = parseSheetRows(pRows);
     const pColMap = pParsed.colMap;
@@ -364,9 +364,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
 
-      const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
-      const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
-      const missoes = await getSheetData(sheets, spreadsheetId, "Missões!A1:Z500");
+      const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
+      const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+      const missoes = await getSheetData(sheets, spreadsheetId, "Missões!A:Z");
 
       const hojeStr = getDataHojeStr();
       let pontoAtivo = false;
@@ -408,7 +408,7 @@ export default async function handler(req, res) {
       const hojeStr = getDataHojeStr();
 
       if (acao === 'baterPonto') {
-        const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A1:Z500" });
+        const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A:Z" });
         const pParsed = parseSheetRows(resPonto.data.values || []);
         const colMap = pParsed.colMap;
 
@@ -439,7 +439,7 @@ export default async function handler(req, res) {
             requestBody: { values: [rowArray] }
           });
         } else if (data.status === 'SAIDA') {
-          const dadosPonto = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A1:Z500");
+          const dadosPonto = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
           let linhaTurno = -1;
           for (let i = dadosPonto.length - 1; i >= 0; i--) {
             const t = dadosPonto[i];
@@ -500,7 +500,7 @@ export default async function handler(req, res) {
       if (acao === 'adicionarMissao') {
         // CORREÇÃO: Repetir/adicionar missão não deve criar nova linha na aba "Missões", apenas lançar no "Progresso Diário" (ou se for criada via interface do usuário explicitamente, mas aqui na sincronização e repetição tratamos de forma única).
         // Vamos verificar se a missão já existe na aba "Missões" antes de inserir, evitando duplicação na aba Missões.
-        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
 
@@ -538,7 +538,7 @@ export default async function handler(req, res) {
           await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
 
@@ -587,7 +587,7 @@ export default async function handler(req, res) {
       if (acao === 'editarMissao') {
         const tituloBusca = String(data.tituloOriginal || data.titulo).trim().toLowerCase();
 
-        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
         const mDataRows = mParsed.dataRows;
@@ -619,7 +619,7 @@ export default async function handler(req, res) {
           await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
         const pDataRows = pParsed.dataRows;
@@ -654,7 +654,7 @@ export default async function handler(req, res) {
         const tituloBusca = String(data.titulo || "").trim().toLowerCase();
         const novaFreq = parseInt(data.frequenciaDias, 10) || 1;
 
-        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
         const mDataRows = mParsed.dataRows;
@@ -685,7 +685,7 @@ export default async function handler(req, res) {
         const sheetProgresso = meta.data.sheets.find(s => s.properties.title === "Progresso Diário");
         const sheetMissoes = meta.data.sheets.find(s => s.properties.title === "Missões");
 
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z1000" });
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
 
@@ -719,8 +719,8 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'atualizarEstadoMissao' || acao === 'concluirMissao') {
-        const dados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A1:Z1000");
-        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A1:Z500" });
+        const dados = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
         const pParsed = parseSheetRows(progRes.data.values || []);
         const colMap = pParsed.colMap;
 
