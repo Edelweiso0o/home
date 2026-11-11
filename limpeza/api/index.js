@@ -372,14 +372,38 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.setHeader('CDN-Cache-Control', 'no-store');
   res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  // ---- CORS ----
+  // Lista de origens autorizadas a chamar esta API pelo navegador.
+  // "Access-Control-Allow-Origin: *" junto com Credentials: true e invalido
+  // pela spec, por isso devolvemos a origem exata que pediu (se estiver na lista).
+  const ORIGENS_PERMITIDAS = [
+    'https://home-limpeza.vercel.app',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+  ];
+  const origemReq = req.headers.origin || '';
+  if (ORIGENS_PERMITIDAS.includes(origemReq)) {
+    res.setHeader('Access-Control-Allow-Origin', origemReq);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
+  }
+
+  // ---- Chave de acesso ----
+  // Se a variavel API_KEY existir na Vercel, todo pedido precisa trazer
+  // o header X-Api-Key igual a ela. Sem a variavel, a checagem e ignorada
+  // (para nao quebrar o site caso a configuracao ainda nao tenha sido feita).
+  const chaveEsperada = process.env.API_KEY;
+  if (chaveEsperada) {
+    const chaveRecebida = req.headers['x-api-key'];
+    if (chaveRecebida !== chaveEsperada) {
+      return res.status(401).json({ status: 'error', message: 'Não autorizado. Chave de acesso inválida.' });
+    }
   }
 
   try {
