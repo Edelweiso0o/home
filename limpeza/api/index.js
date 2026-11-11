@@ -565,7 +565,6 @@ export default async function handler(req, res) {
             const colTempoM = mColMap["Tempo Estimado (Minutos)"] !== undefined ? mColMap["Tempo Estimado (Minutos)"] : mColMap["Tempo Est. (min)"];
             if (colTempoM !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(colTempoM + 1)}${mLinhaAlvo}`, values: [[data.tempoEstimado]] });
           }
-          if (data.frequenciaDias !== undefined && mColMap["Frequência (Dias)"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Frequência (Dias)"] + 1)}${mLinhaAlvo}`, values: [[data.frequenciaDias]] });
           if (data.prioridade && mColMap["Prioridade"] !== undefined) mUpdates.push({ range: `Missões!${columnToLetter(mColMap["Prioridade"] + 1)}${mLinhaAlvo}`, values: [[data.prioridade]] });
 
           if (mUpdates.length > 0) {
@@ -594,7 +593,6 @@ export default async function handler(req, res) {
             const colTempoP = pColMap["Tempo Estimado (Minutos)"] !== undefined ? pColMap["Tempo Estimado (Minutos)"] : pColMap["Tempo Est. (min)"];
             if (colTempoP !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(colTempoP + 1)}${pLinhaAlvo}`, values: [[data.tempoEstimado]] });
           }
-          if (data.frequenciaDias !== undefined && pColMap["Frequência (Dias)"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Frequência (Dias)"] + 1)}${pLinhaAlvo}`, values: [[data.frequenciaDias]] });
           if (data.prioridade && pColMap["Prioridade"] !== undefined) pUpdates.push({ range: `Progresso Diário!${columnToLetter(pColMap["Prioridade"] + 1)}${pLinhaAlvo}`, values: [[data.prioridade]] });
 
           if (pUpdates.length > 0) {
@@ -604,6 +602,36 @@ export default async function handler(req, res) {
             });
           }
           await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
+        }
+
+        return res.status(200).json({ status: "success" });
+      }
+
+      if (acao === 'editarFrequencia') {
+        const tituloBusca = String(data.titulo || "").trim().toLowerCase();
+        const novaFreq = parseInt(data.frequenciaDias, 10) || 1;
+
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A1:Z500" });
+        const mParsed = parseSheetRows(missoesRes.data.values || []);
+        const mColMap = mParsed.colMap;
+        const mDataRows = mParsed.dataRows;
+
+        let mLinhaAlvo = -1;
+        mDataRows.forEach((row, idx) => {
+          const tVal = String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase();
+          if (tVal === tituloBusca) {
+            mLinhaAlvo = idx + (missoesRes.data.values.length - mDataRows.length + 1);
+          }
+        });
+
+        if (mLinhaAlvo !== -1 && mColMap["Frequência (Dias)"] !== undefined) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `Missões!${columnToLetter(mColMap["Frequência (Dias)"] + 1)}${mLinhaAlvo}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[novaFreq]] }
+          });
+          await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
         }
 
         return res.status(200).json({ status: "success" });
