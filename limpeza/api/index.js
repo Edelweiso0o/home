@@ -539,6 +539,9 @@ export default async function handler(req, res) {
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
 
+        console.log('[adicionarMissao] colMap Progresso:', JSON.stringify(pColMap));
+        console.log('[adicionarMissao] recebido do front:', JSON.stringify(data));
+
         // Verificar se já existe no Progresso Diário para o dia atual para evitar duplicatas
         const dataAlvo = data.data || hojeStr;
         const jaExisteProgresso = pParsed.dataRows.some(r => {
@@ -570,12 +573,20 @@ export default async function handler(req, res) {
         if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
         if (pColMap["Status"] !== undefined) rowArrayP[pColMap["Status"]] = "Pendente";
 
-        await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range: `Progresso Diário!A${nextRowProg}`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [rowArrayP] }
-        });
+        console.log('[adicionarMissao] rowArrayP:', JSON.stringify(rowArrayP));
+
+        try {
+          const appendRes = await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `Progresso Diário!A${nextRowProg}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [rowArrayP] }
+          });
+          console.log('[adicionarMissao] append OK, range atualizado:', appendRes.data.updates && appendRes.data.updates.updatedRange);
+        } catch (errAppend) {
+          console.error('[adicionarMissao] ERRO no append:', errAppend.message, errAppend.response && errAppend.response.data);
+          throw errAppend;
+        }
 
         await formatarTabelaCompleta(sheets, spreadsheetId, "Progresso Diário");
         return res.status(200).json({ status: "success", id: novoIdProg });
