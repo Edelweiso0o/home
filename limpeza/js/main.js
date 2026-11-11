@@ -49,7 +49,7 @@ function mostrarLoader(status, tempoMs = null) {
             setTimeout(() => {
                 loader.classList.add('hidden');
                 loader.classList.remove('flex');
-            }, 500);
+            }, 800);
         } else {
             loader.classList.add('hidden');
             loader.classList.remove('flex');
@@ -77,6 +77,11 @@ function mostrarNotificacao(titulo, mensagem, tipo = 'info', duracaoMs = 3000) {
         corIcone = 'text-amber-400';
         iconeFa = 'fa-triangle-exclamation';
         corBarra = 'bg-amber-500';
+    } else if (tipo === 'sincronizando') {
+        corBorda = 'border-indigo-500/60';
+        corIcone = 'text-indigo-400 animate-spin';
+        iconeFa = 'fa-rotate';
+        corBarra = 'bg-indigo-500';
     }
 
     const toastEl = document.createElement('div');
@@ -108,6 +113,8 @@ function mostrarNotificacao(titulo, mensagem, tipo = 'info', duracaoMs = 3000) {
         toastEl.classList.add('hiding');
         setTimeout(() => toastEl.remove(), 300);
     }, duracaoMs);
+
+    return toastId;
 }
 
 function iniciarRelogio() {
@@ -137,7 +144,7 @@ function iniciarRelogio() {
 function processarCicloSegundo() {
     if (estadoPonto.trabalhando && estadoPonto.inicioTurnoMs) {
         const diffMs = Date.now() - estadoPonto.inicioTurnoMs;
-        estadoPonto.segundosTurnoAtual = Math.max(0, Math.floor(diffMs / 1000));
+        estadoPonto.segundosTurnoAtual = Math.floor(diffMs / 1000);
     }
 
     const agora = Date.now();
@@ -176,150 +183,105 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderizarVisaoAtual();
 });
 
-let leituraAtual = 0;
-let revisaoLocal = 0;
-let enviosPendentes = 0;
-let filaEnvios = Promise.resolve();
-let ultimaLeituraConfirmada = 0;
-
-function normalizarStatusMissao(valor) {
-    const chave = String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '');
-    if (['concluido', 'concluida', 'finalizado', 'finalizada'].includes(chave)) return 'Concluído';
-    if (['cancelado', 'cancelada'].includes(chave)) return 'Cancelado';
-    if (chave === 'emandamento') return 'Em Andamento';
-    return 'Pendente';
-}
-
-function normalizarDataMissao(valor) {
-    const texto = String(valor || '').trim();
-    const partes = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (partes) return `${partes[1].padStart(2, '0')}/${partes[2].padStart(2, '0')}/${partes[3]}`;
-    const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : texto;
-}
-
-function normalizarMissaoDaPlanilha(m) {
-    const status = normalizarStatusMissao(m['Status'] ?? m.status);
-    const inicio = String(m['Hora de Início'] ?? m.horaInicio ?? '').trim();
-    const termino = String(m['Hora de Término'] ?? m.horaTermino ?? '').trim();
-    const data = normalizarDataMissao(m['Data'] ?? m.data);
-    const partes = data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    const hora = inicio.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    let tempoInicioMs = null;
-    if (status === 'Em Andamento' && partes && hora) {
-        const ms = new Date(`${partes[3]}-${partes[2]}-${partes[1]}T${hora[1].padStart(2, '0')}:${hora[2]}:${hora[3] || '00'}-03:00`).getTime();
-        if (Number.isFinite(ms)) tempoInicioMs = ms;
-    }
-    return {
-        ...m,
-        id: m['ID'] ?? m.id,
-        data,
-        titulo: m['Título da Missão'] ?? m.titulo ?? '',
-        comodo: String(m['Cômodo'] ?? m.comodo ?? '').trim(),
-        tempoEstimado: m['Tempo Estimado (Minutos)'] ?? m['Tempo Est. (min)'] ?? m.tempoEstimado ?? 0,
-        frequenciaDias: parseInt(m['Frequência (Dias)'] ?? m.frequenciaDias ?? 1, 10) || 1,
-        status,
-        estadoMissao: status === 'Em Andamento' ? 'EmAndamento' : status,
-        tempoInicioMs,
-        horaInicioStr: status === 'Em Andamento' ? inicio : null,
-        horaInicio: inicio,
-        horaTermino: termino,
-        creditos: m['Créditos'] ?? m['Crédito'] ?? m.creditos ?? '0s'
-    };
-}
-
-function creditosEmSegundos(valor) {
-    const texto = String(valor || '').trim();
-    const partes = texto.match(/^(?:(\d+)\s*min\s*(?:e\s*)?)?(\d+)\s*s$/i);
-    return partes ? Number(partes[1] || 0) * 60 + Number(partes[2]) : 0;
-}
-
 async function carregarDadosDoServidor(forcarVerificacao = true) {
-    if (enviosPendentes > 0) return;
-    const leitura = ++leituraAtual;
-    const revisao = revisaoLocal;
     const inicioMs = performance.now();
     mostrarLoader(true);
+
     try {
-        const response = await fetch(`${API_URL}?verificarLancamento=sim&_=${Date.now()}`, {
-            method: 'GET', redirect: 'follow', cache: 'no-store'
-        });
-        if (!response.ok) throw new Error(`Falha na leitura (${response.status})`);
+        let urlFinal = API_URL + '?verificarLancamento=' + (forcarVerificacao ? 'sim' : 'sim');
+        const response = await fetch(urlFinal, { method: 'GET', redirect: 'follow' });
         const data = await response.json();
-        if (!data || data.status !== 'success' || !Array.isArray(data.missoes)) {
-            throw new Error(data?.message || 'Resposta inválida da planilha');
-        }
-        if (leitura !== leituraAtual || revisao !== revisaoLocal || enviosPendentes > 0) return;
-        missoes = data.missoes.map(normalizarMissaoDaPlanilha);
-        contadorConcluidas = missoes.filter(m => m.status === 'Concluído').length;
-        ultimaLeituraConfirmada = Date.now();
         
-        if (data.pontoAtivo !== undefined) {
-            const servidorTrabalhando = Boolean(data.pontoAtivo);
-            if (servidorTrabalhando && data.horaEntradaMs) {
-                estadoPonto.trabalhando = true;
-                estadoPonto.inicioTurnoMs = Number(data.horaEntradaMs);
-                estadoPonto.segundosTurnoAtual = Math.max(0, Math.floor((Date.now() - estadoPonto.inicioTurnoMs) / 1000));
-            } else if (!servidorTrabalhando) {
-                estadoPonto.trabalhando = false;
-                estadoPonto.inicioTurnoMs = null;
-                estadoPonto.segundosTurnoAtual = 0;
-                localStorage.removeItem('cq_ponto_inicio');
+        const fimMs = performance.now();
+        const latenciaMs = fimMs - inicioMs;
+
+        if (data && data.status === "success") {
+            if (data.pontoAtivo !== undefined) {
+                if (data.pontoAtivo) {
+                    estadoPonto.trabalhando = true;
+                    if (data.horaEntradaMs && !estadoPonto.inicioTurnoMs) {
+                        estadoPonto.inicioTurnoMs = data.horaEntradaMs;
+                    }
+                    localStorage.setItem('cq_ponto_trabalhando', 'true');
+                    if (estadoPonto.inicioTurnoMs) localStorage.setItem('cq_ponto_inicio', estadoPonto.inicioTurnoMs);
+                } else {
+                    if (!localStorage.getItem('cq_ponto_inicio')) {
+                        estadoPonto.trabalhando = false;
+                        estadoPonto.inicioTurnoMs = null;
+                        estadoPonto.segundosTurnoAtual = 0;
+                        localStorage.setItem('cq_ponto_trabalhando', 'false');
+                    }
+                }
             }
+
+            if (data.turnos && data.turnos.length > 0) {
+                turnosRegistrados = data.turnos;
+                const ultimoTurno = data.turnos[data.turnos.length - 1];
+                if (ultimoTurno && ultimoTurno["Tempo Trabalhado"]) {
+                    estadoPonto.ultimoTempoTrabalhadoFormatado = ultimoTurno["Tempo Trabalhado"];
+                }
+            }
+
+            // PLANILHA É A FONTE ABSOLUTA DA VERDADE
+            if (data.missoes && data.missoes.length > 0) {
+                missoes = data.missoes.map(mServidor => {
+                    let statusServidor = (mServidor["Status"] || mServidor.status || "Pendente").trim();
+                    
+                    let estadoObj = {
+                        ...mServidor,
+                        status: statusServidor,
+                        estadoMissao: statusServidor === "Concluído" ? "Concluído" : (statusServidor === "Cancelado" ? "Cancelado" : (statusServidor === "Em Andamento" ? "EmAndamento" : "Pendente"))
+                    };
+
+                    // Se a planilha marca Concluído ou Cancelado, limpa qualquer estado temporário local
+                    if (estadoObj.status === 'Concluído' || estadoObj.status === 'Cancelado') {
+                        estadoObj.tempoInicioMs = null;
+                        estadoObj.horaInicioStr = null;
+                    } else if (estadoObj.status === 'Em Andamento') {
+                        estadoObj.estadoMissao = 'EmAndamento';
+                        let mLocal = missoes.find(x => String(x.id) === String(mServidor.id));
+                        if (mLocal && mLocal.tempoInicioMs) {
+                            estadoObj.tempoInicioMs = mLocal.tempoInicioMs;
+                            if (mLocal.horaInicioStr) estadoObj.horaInicioStr = mLocal.horaInicioStr;
+                        }
+                    } else {
+                        estadoObj.tempoInicioMs = null;
+                        estadoObj.horaInicioStr = null;
+                    }
+                    return estadoObj;
+                });
+            }
+            if (data.estatisticas) contadorConcluidas = data.estatisticas.concluidas || 0;
         }
-        if (Array.isArray(data.turnos)) {
-            turnosRegistrados = data.turnos;
-            const ultimoTurno = data.turnos[data.turnos.length - 1];
-            estadoPonto.ultimoTempoTrabalhadoFormatado = ultimoTurno?.['Tempo Trabalhado'] || '00:00:00';
-        }
-        salvarDadosLocalStorage();
-        atualizarDisplaysPonto();
-        renderizarVisaoAtual();
-        processarCicloSegundo();
+
+        mostrarLoader(false, latenciaMs);
     } catch (error) {
-        console.warn('Não foi possível consultar a planilha:', error);
-        mostrarNotificacao('Sem atualização da planilha', 'Exibindo a última cópia salva.', 'aviso', 4000);
-    } finally {
-        if (leitura === leituraAtual) mostrarLoader(false, performance.now() - inicioMs);
+        console.warn("Aviso offline:", error);
+        mostrarLoader(false, performance.now() - inicioMs);
     }
+
+    salvarDadosLocalStorage();
+    atualizarDisplaysPonto();
+    renderizarVisaoAtual();
 }
 
-function sincronizarComServidorEmSegundoPlano(acao, payload) {
-    revisaoLocal++;
-    enviosPendentes++;
-    const missao = payload.id ? encontrarMissaoHoje(payload.id) : null;
-    const dados = { ...payload, ...(missao ? { data: missao.data } : {}) };
-    const envio = filaEnvios.then(async () => {
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ acao, ...dados })
-            });
-            const resposta = await response.json();
-            if (!response.ok || resposta?.status !== 'success') {
-                throw new Error(resposta?.message || `Falha ao salvar (${response.status})`);
-            }
-            return resposta;
-        } catch (error) {
-            console.error('Erro ao salvar na planilha:', error);
-            mostrarNotificacao('Alteração não confirmada', 'Não foi possível confirmar a gravação; o painel será conferido.', 'aviso', 5000);
-            return { status: 'error', message: String(error) };
-        } finally {
-            enviosPendentes--;
-            if (enviosPendentes === 0) await carregarDadosDoServidor(false);
+async function sincronizarComServidorEmSegundoPlano(acao, payload) {
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ acao, ...payload })
+        });
+        const resJson = await response.json();
+        if (resJson && resJson.status === 'success') {
+            carregarDadosDoServidor(false);
         }
-    });
-    filaEnvios = envio.then(() => undefined, () => undefined);
-    return envio;
-}
-
-function conferirAoVoltar() {
-    if (document.visibilityState === 'visible' && Date.now() - ultimaLeituraConfirmada >= 60000) {
-        carregarDadosDoServidor(false);
+        return resJson;
+    } catch (error) {
+        console.error("Erro background sync:", error);
+        return { status: "error" };
     }
 }
-window.addEventListener('focus', conferirAoVoltar);
-document.addEventListener('visibilitychange', conferirAoVoltar);
 
 async function alternarPonto() {
     if (estadoPonto.trabalhando) {
@@ -331,8 +293,7 @@ async function alternarPonto() {
     }
 
     const proximoStatus = !estadoPonto.trabalhando;
-    mostrarLoader(true);
-
+    
     if (proximoStatus) {
         const dataAtual = new Date();
         const horaEntradaStr = String(dataAtual.getHours()).padStart(2, '0') + ":" + String(dataAtual.getMinutes()).padStart(2, '0') + ":" + String(dataAtual.getSeconds()).padStart(2, '0');
@@ -347,7 +308,7 @@ async function alternarPonto() {
         atualizarDisplaysPonto();
         mostrarNotificacao("Ponto Registrado", "Turno iniciado instantaneamente!", "sucesso", 2000);
 
-        await sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'ENTRADA', horaExata: horaEntradaStr });
+        sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'ENTRADA', horaExata: horaEntradaStr });
     } else {
         const duracaoSegs = estadoPonto.segundosTurnoAtual;
         
@@ -361,10 +322,9 @@ async function alternarPonto() {
         atualizarDisplaysPonto();
         mostrarNotificacao("Turno Encerrado", "Você entrou em folga.", "atencao", 2000);
 
-        await sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'SAIDA', duracaoSegundos: duracaoSegs });
+        sincronizarComServidorEmSegundoPlano('baterPonto', { status: 'SAIDA', duracaoSegundos: duracaoSegs });
     }
     salvarDadosLocalStorage();
-    mostrarLoader(false);
 }
 
 function atualizarDisplaysPonto() {
@@ -448,13 +408,13 @@ async function cadastrarMissao(event) {
     const comodo = document.getElementById('selectComodo').value;
     const tempoEst = parseInt(document.getElementById('inputTempoEstimado').value, 10);
     const prioridade = document.getElementById('selectPrioridade').value;
-    const frequenciaDias = parseInt(document.getElementById('inputFrequencia').value || 1, 10);
+    const missaoUnicaEl = document.getElementById('inputUnica');
+    const missaoUnica = missaoUnicaEl ? missaoUnicaEl.checked : false;
 
     if (!titulo) return;
 
     localStorage.setItem('cq_last_comodo', comodo);
     localStorage.setItem('cq_last_prioridade', prioridade);
-    localStorage.setItem('cq_last_frequencia', frequenciaDias);
 
     const hojeStr = obterDataHojeStr();
 
@@ -465,11 +425,11 @@ async function cadastrarMissao(event) {
         comodo: comodo,
         tempoEstimado: tempoEst,
         prioridade: prioridade,
-        frequenciaDias: frequenciaDias,
         status: 'Pendente',
         estadoMissao: 'Pendente',
         tempoInicioMs: null,
-        horaInicioStr: null
+        horaInicioStr: null,
+        missaoUnica: missaoUnica
     };
 
     missoes.push(novaMissao);
@@ -477,6 +437,7 @@ async function cadastrarMissao(event) {
     renderizarVisaoAtual();
 
     document.getElementById('formNovaMissao').reset();
+    if (missaoUnicaEl) missaoUnicaEl.checked = false;
     fecharModalNovaMissao();
     carregarUltimasPreferenciasSelects();
     mostrarNotificacao("Sucesso", "Missão adicionada instantaneamente.", "sucesso", 2000);
@@ -511,7 +472,7 @@ function abrirModalDuplicarRapido() {
             <div onclick="duplicarMissaoPorTitulo('${m.titulo}')" class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl hover:border-purple-500 cursor-pointer transition flex justify-between items-center">
                 <div>
                     <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
-                    <p class="text-[10px] text-purple-300/60">${m.comodo} • tempo: ${m.tempoEstimado} min • a cada ${m.frequenciaDias} dia(s)</p>
+                    <p class="text-[10px] text-purple-300/60">${m.comodo} • tempo missão: ${m.tempoEstimado} min</p>
                 </div>
                 <span class="text-xs bg-purple-600/20 text-purple-300 px-2.5 py-1 rounded-lg font-mono-code"><i class="fa-solid fa-plus mr-1"></i> Repetir</span>
             </div>
@@ -546,11 +507,11 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
         comodo: missaoRef.comodo,
         tempoEstimado: missaoRef.tempoEstimado,
         prioridade: missaoRef.prioridade,
-        frequenciaDias: missaoRef.frequenciaDias,
         status: 'Pendente',
         estadoMissao: 'Pendente',
         tempoInicioMs: null,
-        horaInicioStr: null
+        horaInicioStr: null,
+        missaoUnica: true
     };
 
     missoes.push(novaMissaoDuplicada);
@@ -570,7 +531,6 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
 function carregarUltimasPreferenciasSelects() {
     const lastComodo = localStorage.getItem('cq_last_comodo');
     const lastPrioridade = localStorage.getItem('cq_last_prioridade');
-    const lastFreq = localStorage.getItem('cq_last_frequencia');
     if (lastComodo) {
         const sel = document.getElementById('selectComodo');
         if (sel) sel.value = lastComodo;
@@ -579,97 +539,16 @@ function carregarUltimasPreferenciasSelects() {
         const selP = document.getElementById('selectPrioridade');
         if (selP) selP.value = lastPrioridade;
     }
-    if (lastFreq) {
-        const selF = document.getElementById('inputFrequencia');
-        if (selF) selF.value = lastFreq;
-    }
-}
-
-function abrirModalGerenciarFrequencias() {
-    const modal = document.getElementById('modalGerenciarFrequencias');
-    const container = document.getElementById('listaConfigFrequencias');
-    if (!modal || !container) return;
-
-    // Agrupa por título base para listar tarefas únicas cadastradas
-    const unicasBase = {};
-    missoes.forEach(m => {
-        let tituloBaseClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-        if (!unicasBase[tituloBaseClean]) {
-            unicasBase[tituloBaseClean] = m;
-        }
-    });
-
-    const lista = Object.values(unicasBase);
-    if (lista.length === 0) {
-        container.innerHTML = `<p class="text-xs text-purple-300/50 p-4 text-center">Nenhuma missão cadastrada.</p>`;
-    } else {
-        container.innerHTML = lista.map(m => {
-            let tituloClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-            let freqAtual = m.frequenciaDias || 1;
-            return `
-                <div class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl flex items-center justify-between gap-3" data-titulo-base="${tituloClean}">
-                    <div>
-                        <h4 class="font-bold text-xs text-white">${tituloClean}</h4>
-                        <p class="text-[10px] text-purple-300/60">${m.comodo}</p>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <select class="select-frequencia-config bg-[#17112d] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white font-mono-code" data-titulo="${tituloClean}">
-                            <option value="1" ${freqAtual == 1 ? 'selected' : ''}>Todos os dias (1 dia)</option>
-                            <option value="2" ${freqAtual == 2 ? 'selected' : ''}>A cada 2 dias</option>
-                            <option value="3" ${freqAtual == 3 ? 'selected' : ''}>A cada 3 dias</option>
-                            <option value="4" ${freqAtual == 4 ? 'selected' : ''}>A cada 4 dias</option>
-                            <option value="5" ${freqAtual == 5 ? 'selected' : ''}>A cada 5 dias</option>
-                            <option value="7" ${freqAtual == 7 ? 'selected' : ''}>A cada 7 dias</option>
-                            <option value="15" ${freqAtual == 15 ? 'selected' : ''}>A cada 15 dias</option>
-                        </select>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    modal.classList.remove('hidden');
-}
-
-function fecharModalGerenciarFrequencias() {
-    const modal = document.getElementById('modalGerenciarFrequencias');
-    if (modal) modal.classList.add('hidden');
-}
-
-async function salvarTodasFrequencias() {
-    const selects = document.querySelectorAll('.select-frequencia-config');
-    const atualizacoes = [];
-
-    selects.forEach(sel => {
-        const tituloBase = sel.getAttribute('data-titulo');
-        const novaFreq = parseInt(sel.value, 10);
-
-        missoes.forEach(m => {
-            let tClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-            if (tClean === tituloBase) {
-                m.frequenciaDias = novaFreq;
-                atualizacoes.push({ titulo: m.titulo, frequenciaDias: novaFreq });
-            }
-        });
-    });
-
-    salvarDadosLocalStorage();
-    renderizarVisaoAtual();
-    fecharModalGerenciarFrequencias();
-    mostrarNotificacao("Sucesso", "Frequências atualizadas com sucesso.", "sucesso", 2000);
-
-    // Sincroniza cada alteração de frequência com o servidor
-    for (let item of atualizacoes) {
-        sincronizarComServidorEmSegundoPlano('editarFrequencia', {
-            titulo: item.titulo,
-            frequenciaDias: item.frequenciaDias
-        });
-    }
 }
 
 function abrirModalEdicao(id) {
     const missao = encontrarMissaoHoje(id);
     if (!missao) return;
+
+    if (missao.status === 'Concluído') {
+        mostrarNotificacao("Bloqueado", "Você não pode editar uma missão já concluída.", "aviso");
+        return;
+    }
 
     const elId = document.getElementById('editIdMissao');
     const elTituloOriginal = document.getElementById('editTituloOriginal');
@@ -677,6 +556,7 @@ function abrirModalEdicao(id) {
     const elComodo = document.getElementById('editSelectComodo');
     const elTempo = document.getElementById('editInputTempoEstimado');
     const elPrioridade = document.getElementById('editSelectPrioridade');
+    const elUnica = document.getElementById('editInputUnica');
 
     if (elId) elId.value = missao.id;
     if (elTituloOriginal) elTituloOriginal.value = missao.titulo;
@@ -684,6 +564,7 @@ function abrirModalEdicao(id) {
     if (elComodo) elComodo.value = missao.comodo;
     if (elTempo) elTempo.value = missao.tempoEstimado;
     if (elPrioridade) elPrioridade.value = missao.prioridade;
+    if (elUnica) elUnica.checked = !!missao.missaoUnica;
 
     const modal = document.getElementById('modalEditarMissao');
     if (modal) modal.classList.remove('hidden');
@@ -711,6 +592,9 @@ async function salvarEdicaoMissao(event) {
     missao.comodo = comodoNovo;
     missao.tempoEstimado = tempoNovo;
     missao.prioridade = prioridadeNova;
+    
+    const elUnica = document.getElementById('editInputUnica');
+    if (elUnica) missao.missaoUnica = elUnica.checked;
 
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
@@ -740,8 +624,7 @@ function iniciarMissao(id) {
         missao.estadoMissao = 'EmAndamento';
         missao.status = 'Em Andamento';
         missao.tempoInicioMs = dataAtual.getTime();
-        missao.horaInicioStr = horaInicioExata;
-        missao.horaInicio = horaInicioExata;
+        missao.horaInicioStr = String(dataAtual.getHours()).padStart(2, '0') + ":" + String(dataAtual.getMinutes()).padStart(2, '0');
         
         salvarDadosLocalStorage();
         renderizarVisaoAtual();
@@ -777,8 +660,6 @@ function concluirMissao(id) {
         missao.tempoRealMin = missao.tempoEstimado;
     }
 
-    missao.horaInicio = horaInicioExata;
-    missao.horaTermino = horaTerminoExata;
     missao.status = 'Concluído';
     missao.estadoMissao = 'Concluído';
     missao.tempoInicioMs = null;
@@ -816,15 +697,12 @@ function alternarNaoFazerHoje(id) {
 }
 
 function excluirMissao(id) {
-    const missaoAlvo = encontrarMissaoHoje(id);
-    const titulo = missaoAlvo ? missaoAlvo.titulo : "";
     const hojeStr = obterDataHojeStr();
-
     missoes = missoes.filter(m => !(String(m.id) === String(id) && String(m.data || hojeStr) === hojeStr));
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
     mostrarNotificacao("Excluído", "Missão removida.", "atencao", 2000);
-    sincronizarComServidorEmSegundoPlano('excluirMissao', { id, titulo });
+    sincronizarComServidorEmSegundoPlano('excluirMissao', { id });
 }
 
 function getIconeComodo(comodo) {
@@ -854,6 +732,7 @@ function renderizarMissoes() {
     if (!container) return;
 
     const hojeStr = obterDataHojeStr();
+
     const fComodo = document.getElementById('filtroFilaComodo') ? document.getElementById('filtroFilaComodo').value : 'TODOS';
     const fPrioridade = document.getElementById('filtroFilaPrioridade') ? document.getElementById('filtroFilaPrioridade').value : 'TODOS';
 
@@ -903,12 +782,10 @@ function renderizarMissoes() {
                     Início: ${horaInicioFmt}
                 </span>
                 <span class="bg-[#090614] text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
-                    Previsão: ${previsaoFmt}
+                    Previsão Término: ${previsaoFmt}
                 </span>
             `;
         }
-
-        let textoFrequencia = m.frequenciaDias === 1 ? 'Diária' : `A cada ${m.frequenciaDias} dias`;
 
         if (!emAndamento) {
             statusBadge = '<span class="text-[9px] bg-purple-500/10 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded font-mono-code">PENDENTE</span>';
@@ -927,6 +804,9 @@ function renderizarMissoes() {
         } else {
             statusBadge = '<span class="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono-code animate-pulse">EM ANDAMENTO</span>';
             botoesAcao = `
+                <button onclick="abrirModalEdicao('${m.id}')" class="text-purple-300/50 hover:text-purple-300 px-2 py-2 text-xs transition mr-1" title="Editar">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
                 <div class="flex items-center space-x-2 mr-2 font-mono-code text-xs text-amber-400 bg-[#090614] px-2.5 py-1 rounded-lg border border-amber-500/30">
                     <i class="fa-solid fa-stopwatch animate-spin"></i>
                     <span id="timer-missao-${m.id}">00:00:00</span>
@@ -948,6 +828,7 @@ function renderizarMissoes() {
                         <div class="flex items-center space-x-2">
                             <h4 class="font-bold text-sm text-white">${m.titulo}</h4>
                             ${statusBadge}
+                            ${m.missaoUnica ? '<span class="text-[9px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded font-mono-code">ÚNICA</span>' : ''}
                         </div>
                         <p class="text-xs text-purple-300/70 mt-0.5">${m.comodo} • ID: ${m.id}</p>
                         
@@ -955,11 +836,8 @@ function renderizarMissoes() {
                             <span class="bg-[#090614] text-purple-300 px-2 py-0.5 rounded border border-purple-900/60">
                                 Prioridade: ${m.prioridade}
                             </span>
-                            <span class="bg-[#090614] text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
-                                🔄 ${textoFrequencia}
-                            </span>
                             <span class="bg-[#090614] text-purple-200 px-2 py-0.5 rounded border border-purple-900/60">
-                                tempo: ${m.tempoEstimado} min
+                                tempo missão: ${m.tempoEstimado} min
                             </span>
                             ${infoDinamicaInicioEPrevisao}
                             <span id="aviso-atraso-${m.id}" class="hidden bg-red-950/40 text-red-400 px-2 py-0.5 rounded border border-red-900/60 animate-pulse font-bold">
@@ -1029,7 +907,7 @@ function renderizarHistoricoGeral() {
                             <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
                             <span class="text-[9px] ${corStatus} border px-1.5 py-0.5 rounded font-mono-code">${st}</span>
                         </div>
-                        <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • tempo: ${m.tempoEstimado} min</p>
+                        <p class="text-[11px] text-purple-300/60 mt-0.5">${m.comodo} • Data: ${m.data || 'N/D'} • tempo missão: ${m.tempoEstimado} min</p>
                     </div>
                 </div>
                 <span class="text-[10px] font-mono-code text-purple-300/40">ID: ${m.id}</span>
@@ -1080,7 +958,7 @@ function abrirDetalhesComodo(comodo, statusFiltro = 'Concluído') {
                         <span class="text-xs font-bold text-white">${m.titulo}</span>
                         <span class="text-[10px] font-mono-code ${badgeBg} px-2 py-0.5 rounded border">${st}</span>
                     </div>
-                    <p class="text-[11px] text-purple-300/70 font-mono-code">tempo: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
+                    <p class="text-[11px] text-purple-300/70 font-mono-code">tempo missão: ${m.tempoEstimado} min • Prioridade: ${m.prioridade}</p>
                 </div>
             `;
         }).join('');
@@ -1112,7 +990,12 @@ function atualizarEstatisticasGerais() {
             if (st === 'Concluído') {
                 concluidasTotal++;
                 concluidasPorComodo[comodoKey] = (concluidasPorComodo[comodoKey] || 0) + 1;
-                creditosEconomizadosMin += creditosEmSegundos(m['Créditos'] ?? m.creditos) / 60;
+
+                let tempoEst = parseFloat(m.tempoEstimado) || 0;
+                let tempoReal = m.tempoRealMin || tempoEst;
+                let ganho = tempoEst - tempoReal;
+                if (ganho > 0) creditosEconomizadosMin += ganho;
+
             } else if (st !== 'Cancelado') {
                 pendentesTotal++;
                 pendentesPorComodo[comodoKey] = (pendentesPorComodo[comodoKey] || 0) + 1;
@@ -1174,10 +1057,7 @@ function atualizarEstatisticasGerais() {
     }
 
     const elCoins = document.getElementById('coinsBalance');
-    if (elCoins) {
-        const segundos = Math.round(creditosEconomizadosMin * 60);
-        elCoins.innerText = segundos >= 60 ? `${Math.floor(segundos / 60)}min e ${segundos % 60}s` : `${segundos}s`;
-    }
+    if (elCoins) elCoins.innerText = `${creditosEconomizadosMin}m`;
 }
 
 function salvarDadosLocalStorage() {
@@ -1193,15 +1073,7 @@ function salvarDadosLocalStorage() {
 
 function carregarDadosLocalStorage() {
     const m = localStorage.getItem('cq_missoes');
-    if (m) {
-        try {
-            const copia = JSON.parse(m);
-            missoes = Array.isArray(copia) ? copia.map(normalizarMissaoDaPlanilha) : [];
-        } catch (error) {
-            missoes = [];
-            localStorage.removeItem('cq_missoes');
-        }
-    }
+    if (m) missoes = JSON.parse(m);
 
     const c = localStorage.getItem('cq_concluidas');
     if (c) contadorConcluidas = parseInt(c, 10);
