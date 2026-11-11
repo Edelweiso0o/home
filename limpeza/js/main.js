@@ -174,13 +174,16 @@ function processarCicloSegundo() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    limparChaveAntiga();
+
     carregarDadosLocalStorage();
     renderizarVisaoAtual();
     iniciarRelogio();
-
-    await carregarDadosDoServidor(true);
     carregarUltimasPreferenciasSelects();
-    renderizarVisaoAtual();
+
+    // Toda vez que a pagina abre, a senha e pedida.
+    // O Chrome preenche o formulario se tiver a senha salva.
+    abrirModalChave();
 });
 
 // =====================================================================
@@ -409,12 +412,22 @@ async function excluirLinhasSelecionadas() {
 // =====================================================================
 const CHAVE_STORAGE = 'cq_api_key';
 
+// A chave NAO fica salva no navegador: vive so na memoria desta aba.
+// Quem guarda a senha para preencher o formulario e o gerenciador de
+// senhas do Chrome. Recarregar a pagina pede a senha de novo.
+let chaveEmMemoria = '';
+
 function obterChaveAPI() {
-    return localStorage.getItem(CHAVE_STORAGE) || '';
+    return chaveEmMemoria;
 }
 
 function salvarChaveAPI(chave) {
-    localStorage.setItem(CHAVE_STORAGE, String(chave || '').trim());
+    chaveEmMemoria = String(chave || '').trim();
+}
+
+// Remove qualquer chave que versoes antigas tenham deixado no navegador
+function limparChaveAntiga() {
+    try { localStorage.removeItem(CHAVE_STORAGE); } catch (e) { /* ignora */ }
 }
 
 function cabecalhosAPI(comJson = true) {
@@ -548,6 +561,14 @@ async function confirmarChaveAcesso() {
 }
 
 async function carregarDadosDoServidor(forcarVerificacao = true) {
+    // Sem a senha em memoria, nao faz sentido chamar a API: mostra a tela local
+    // e deixa o modal de login cuidar do resto.
+    if (!obterChaveAPI()) {
+        mostrarLoader(false);
+        renderizarVisaoAtual();
+        return;
+    }
+
     const inicioMs = performance.now();
     mostrarLoader(true);
 
