@@ -133,8 +133,8 @@
                         <option value="Média">Média</option>
                         <option value="Baixa">Baixa</option>
                     </select>
-                    <button onclick="abrirModalFrequencias()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1.5" title="Configurar Frequências das Missões">
-                        <i class="fa-solid fa-sliders text-purple-400"></i>
+                    <button onclick="abrirModalGerenciarFrequencias()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-indigo-300 border border-indigo-800/60 transition flex items-center space-x-1.5" title="Configurar Frequências">
+                        <i class="fa-solid fa-calendar-days text-indigo-400"></i>
                         <span>Frequências</span>
                     </button>
                     <button onclick="abrirModalDuplicarRapido()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1.5" title="Repetir missão hoje">
@@ -220,16 +220,15 @@
                     </select>
                 </div>
                 <div>
-                    <label class="text-[11px] font-mono-code text-purple-300/70">Frequência (Repetir a cada X dias)</label>
+                    <label class="text-[11px] font-mono-code text-purple-300/70">Frequência (Dias)</label>
                     <select id="inputFrequencia" required class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-2 text-xs text-white mt-1">
                         <option value="1" selected>Todos os dias (1 dia)</option>
-                        <option value="2">Um dia sim, um dia não (2 dias)</option>
+                        <option value="2">A cada 2 dias</option>
                         <option value="3">A cada 3 dias</option>
                         <option value="4">A cada 4 dias</option>
                         <option value="5">A cada 5 dias</option>
-                        <option value="7">Uma vez por semana (7 dias)</option>
+                        <option value="7">A cada 7 dias</option>
                         <option value="15">A cada 15 dias</option>
-                        <option value="30">Uma vez por mês (30 dias)</option>
                     </select>
                 </div>
                 <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
@@ -253,7 +252,7 @@
         </div>
     </div>
 
-    <!-- Modal Editar Missão -->
+    <!-- Modal Editar Missão (Sem frequência) -->
     <div id="modalEditarMissao" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
@@ -301,22 +300,19 @@
         </div>
     </div>
 
-    <!-- Modal Configuração de Frequências -->
-    <div id="modalFrequencias" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
+    <!-- Modal Gerenciar Frequências -->
+    <div id="modalGerenciarFrequencias" class="fixed inset-0 w-screen h-screen bg-[#090614]/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
             <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
-                <div class="flex items-center space-x-2">
-                    <i class="fa-solid fa-sliders text-purple-400"></i>
-                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Configurar Frequência das Missões</h3>
-                </div>
-                <button onclick="fecharModalFrequencias()" class="text-purple-300/50 hover:text-white transition">
+                <h3 class="text-sm font-bold text-white uppercase tracking-wider">Configurar Frequências de Missões</h3>
+                <button onclick="fecharModalGerenciarFrequencias()" class="text-purple-300/50 hover:text-white transition">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-            <p class="text-xs text-purple-300/70">Ajuste a frequência com que cada missão deve ser agendada e lançada automaticamente:</p>
-            <div id="listaConfigFrequencias" class="space-y-3 overflow-y-auto flex-grow pr-1"></div>
+            <p class="text-xs text-purple-300/70">Ajuste diretamente a frequência (em dias) de cada missão cadastrada:</p>
+            <div id="listaConfigFrequencias" class="space-y-2.5 overflow-y-auto flex-grow pr-1"></div>
             <div class="flex justify-end pt-3 border-t border-purple-900/50">
-                <button type="button" onclick="fecharModalFrequencias()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Concluir</button>
+                <button type="button" onclick="salvarTodasFrequencias()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Salvar Frequências</button>
             </div>
         </div>
     </div>
