@@ -12,6 +12,7 @@ let missoes = [];
 let turnosRegistrados = [];
 let contadorConcluidas = 0;
 let visaoAtual = 'fila'; 
+let cicloFolgaAtual = null;
 
 function obterDataHojeStr() {
     const d = new Date();
@@ -630,6 +631,11 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
         const latenciaMs = fimMs - inicioMs;
 
         if (data && data.status === "success") {
+            if (data.cicloFolga) {
+                cicloFolgaAtual = data.cicloFolga;
+                atualizarPainelFolga();
+            }
+
             if (data.pontoAtivo !== undefined) {
                 if (data.pontoAtivo) {
                     estadoPonto.trabalhando = true;
@@ -1733,3 +1739,208 @@ async function salvarTodasFrequencias() {
         mostrarNotificacao("Erro", "Não foi possível salvar as frequências.", "aviso", 4000);
     }
 }
+
+// =====================================================================
+// CICLO DE FOLGA
+// A configuracao mora na aba "Configurações" da planilha.
+// A contagem vem do "Registro de Ponto": 1 dia com turno = 1 dia trabalhado.
+// =====================================================================
+
+let somFolgaLigado = false;
+let audioCtxFolga = null;
+let particulasRodando = false;
+
+function atualizarPainelFolga() {
+    const c = cicloFolgaAtual;
+    const card = document.getElementById('cardCicloFolga');
+    const banner = document.getElementById('bannerFolga');
+
+    if (!c) {
+        if (banner) banner.classList.add('hidden');
+        if (card) card.classList.remove('card-folga-ativa');
+        return;
+    }
+
+    const total = parseInt(c.diasParaFolga, 10) || 9;
+    const feitos = parseInt(c.diasTrabalhados, 10) || 0;
+    const faltam = parseInt(c.faltam, 10) || 0;
+    const pct = total > 0 ? Math.min(100, Math.round((feitos / total) * 100)) : 0;
+
+    const elFeitos = document.getElementById('folgaDiasTrabalhados');
+    const elTotal = document.getElementById('folgaDeTotal');
+    const elFaltam = document.getElementById('folgaFaltam');
+    const elBarra = document.getElementById('folgaBarra');
+
+    if (elFeitos) elFeitos.innerText = feitos;
+    if (elTotal) elTotal.innerText = '/ ' + total + ' dias';
+    if (elFaltam) elFaltam.innerText = faltam;
+    if (elBarra) elBarra.style.width = pct + '%';
+
+    const cfgDias = document.getElementById('cfgDiasTrabalhados');
+    const cfgFaltam = document.getElementById('cfgFaltam');
+    const cfgUltima = document.getElementById('cfgUltimaFolga');
+    const inputDias = document.getElementById('inputDiasParaFolga');
+    if (cfgDias) cfgDias.innerText = feitos;
+    if (cfgFaltam) cfgFaltam.innerText = faltam;
+    if (cfgUltima) cfgUltima.innerText = c.ultimaFolga || 'início';
+    if (inputDias && document.activeElement !== inputDias) inputDias.value = total;
+
+    if (c.ehFolgaHoje) {
+        if (banner) banner.classList.remove('hidden');
+        if (card) card.classList.add('card-folga-ativa');
+        iniciarParticulasFolga();
+        if (somFolgaLigado) tocarSomFolga();
+    } else {
+        if (banner) banner.classList.add('hidden');
+        if (card) card.classList.remove('card-folga-ativa');
+        pararParticulasFolga();
+    }
+}
+
+function iniciarParticulasFolga() {
+    const alvo = document.getElementById('particulasFolga');
+    if (!alvo || particulasRodando) return;
+    particulasRodando = true;
+
+    const simbolos = ['🌴', '🌞', '🍃', '✨', '🌊', '☀️'];
+
+    const criar = () => {
+        if (!particulasRodando || !alvo) return;
+        const p = document.createElement('span');
+        p.className = 'particula-folga';
+        p.innerText = simbolos[Math.floor(Math.random() * simbolos.length)];
+        p.style.left = (Math.random() * 96) + '%';
+        p.style.animationDuration = (3.5 + Math.random() * 2.5) + 's';
+        p.style.animationDelay = (Math.random() * 1.2) + 's';
+        p.style.fontSize = (11 + Math.random() * 8) + 'px';
+        alvo.appendChild(p);
+        setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, 7000);
+    };
+
+    for (let i = 0; i < 6; i++) setTimeout(criar, i * 260);
+    window._folgaInterval = setInterval(criar, 900);
+}
+
+function pararParticulasFolga() {
+    particulasRodando = false;
+    if (window._folgaInterval) {
+        clearInterval(window._folgaInterval);
+        window._folgaInterval = null;
+    }
+    const alvo = document.getElementById('particulasFolga');
+    if (alvo) alvo.innerHTML = '';
+}
+
+// Som relaxante gerado na hora (sem arquivo). Acorde suave com fade-in/out.
+function tocarSomFolga() {
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        if (!audioCtxFolga) audioCtxFolga = new Ctx();
+        const ctx = audioCtxFolga;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const agora = ctx.currentTime;
+        const dur = 5.0;
+        const master = ctx.createGain();
+        master.gain.setValueAtTime(0.0001, agora);
+        master.gain.exponentialRampToValueAtTime(0.16, agora + 1.2);
+        master.gain.exponentialRampToValueAtTime(0.0001, agora + dur);
+        master.connect(ctx.destination);
+
+        // Acorde maior suave (Dó maior com nona): C4, E4, G4, D5
+        const notas = [261.63, 329.63, 392.00, 587.33];
+        notas.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = i === 3 ? 'sine' : 'triangle';
+            osc.frequency.setValueAtTime(freq, agora);
+            // leve desafinação para soar orgânico
+            osc.detune.setValueAtTime((Math.random() - 0.5) * 6, agora);
+            g.gain.setValueAtTime(0.0001, agora);
+            g.gain.exponentialRampToValueAtTime(0.22 / (i + 1), agora + 0.8 + i * 0.25);
+            g.gain.exponentialRampToValueAtTime(0.0001, agora + dur - 0.4);
+            osc.connect(g);
+            g.connect(master);
+            osc.start(agora);
+            osc.stop(agora + dur);
+        });
+    } catch (e) {
+        console.error('[tocarSomFolga]', e);
+    }
+}
+
+function alternarSomFolga() {
+    somFolgaLigado = !somFolgaLigado;
+    const label = document.getElementById('labelSomFolga');
+    const btn = document.getElementById('btnSomFolga');
+    if (label) label.innerText = somFolgaLigado ? 'Som ligado' : 'Som';
+    if (btn) {
+        btn.className = somFolgaLigado
+            ? 'px-3 py-1.5 rounded-xl text-xs font-mono-code bg-amber-400/30 hover:bg-amber-400/40 text-amber-100 border border-amber-400/60 transition flex items-center space-x-1.5'
+            : 'px-3 py-1.5 rounded-xl text-xs font-mono-code bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition flex items-center space-x-1.5';
+    }
+    if (somFolgaLigado) tocarSomFolga();
+}
+
+function abrirModalConfigFolga() {
+    const modal = document.getElementById('modalConfigFolga');
+    if (!modal) return;
+    atualizarPainelFolga();
+    modal.classList.remove('hidden');
+}
+
+function fecharModalConfigFolga() {
+    const modal = document.getElementById('modalConfigFolga');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function salvarConfigFolga() {
+    const input = document.getElementById('inputDiasParaFolga');
+    const valor = parseInt(input ? input.value : 9, 10);
+    if (!Number.isFinite(valor) || valor < 1 || valor > 365) {
+        mostrarNotificacao("Atenção", "Informe um número de dias entre 1 e 365.", "aviso");
+        return;
+    }
+    try {
+        const resposta = await sincronizarComServidorEmSegundoPlano('salvarConfigFolga', { diasParaFolga: valor });
+        if (resposta && resposta.cicloFolga) {
+            cicloFolgaAtual = resposta.cicloFolga;
+            atualizarPainelFolga();
+        }
+        fecharModalConfigFolga();
+        mostrarNotificacao("Salvo", `Ciclo de folga: ${valor} dias trabalhados.`, "sucesso", 2500);
+    } catch (e) {
+        console.error('[salvarConfigFolga]', e);
+        mostrarNotificacao("Erro", "Não foi possível salvar o ciclo de folga.", "aviso", 4000);
+    }
+}
+
+async function resetarCicloFolga() {
+    try {
+        const resposta = await sincronizarComServidorEmSegundoPlano('resetarCicloFolga', {});
+        if (resposta && resposta.cicloFolga) {
+            cicloFolgaAtual = resposta.cicloFolga;
+            atualizarPainelFolga();
+        }
+        mostrarNotificacao("Contagem zerada", "O ciclo recomeça hoje.", "sucesso", 2500);
+    } catch (e) {
+        console.error('[resetarCicloFolga]', e);
+        mostrarNotificacao("Erro", "Não foi possível zerar a contagem.", "aviso", 4000);
+    }
+}
+
+async function trabalharNaFolga() {
+    try {
+        const resposta = await sincronizarComServidorEmSegundoPlano('trabalharNaFolga', {});
+        if (resposta && resposta.cicloFolga) {
+            cicloFolgaAtual = resposta.cicloFolga;
+            atualizarPainelFolga();
+        }
+        mostrarNotificacao("Bora", "A folga fica para o próximo dia.", "sucesso", 2500);
+    } catch (e) {
+        console.error('[trabalharNaFolga]', e);
+        mostrarNotificacao("Erro", "Não foi possível pular a folga.", "aviso", 4000);
+    }
+}
+
