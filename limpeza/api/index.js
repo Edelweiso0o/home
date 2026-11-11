@@ -248,6 +248,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       let titulo = mRow[mColMap["Título da Missão"]] || "";
       let comodo = mRow[mColMap["Cômodo"]] || "";
       let tempoEst = mRow[mColMap["Tempo Estimado (Minutos)"]] || mRow[mColMap["Tempo Est. (min)"]] || "";
+      let tempoMedio = mRow[mColMap["Tempo Médio (Minutos)"]] || "";
       let prioridade = mRow[mColMap["Prioridade"]] || "Média";
       let frequenciaDias = parseInt(mRow[mColMap["Frequência (Dias)"]] || 1, 10) || 1;
 
@@ -259,9 +260,6 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
 
         if (!jaExisteHoje) {
           let ultimaConclusaoMs = 0;
-          let somaTemposRealizados = 0;
-          let qtdConclusoes = 0;
-
           pData.forEach(pRow => {
             const tVal = pRow[pColMap["Título da Missão"]] || "";
             const stVal = normalizarStatusMissao(pRow[pColMap["Status"]]);
@@ -269,29 +267,20 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase() && stVal === 'Concluído') {
               const dMs = parseDataPtBrParaMs(dataVal);
               if (dMs > ultimaConclusaoMs) ultimaConclusaoMs = dMs;
-              
-              // Tenta calcular o tempo real gasto se houver hora de início e término
-              const hInicio = String(pRow[pColMap["Hora de Início"]] || "").trim();
-              const hTermino = String(pRow[pColMap["Hora de Término"]] || "").trim();
-              if (hInicio && hTermino) {
-                const [hi, mi, si] = hInicio.split(':').map(Number);
-                const [ht, mt, st] = hTermino.split(':').map(Number);
-                const diffSec = (ht * 3600 + mt * 60 + (st || 0)) - (hi * 3600 + mi * 60 + (si || 0));
-                if (diffSec > 0) {
-                  somaTemposRealizados += diffSec / 60;
-                  qtdConclusoes++;
-                }
-              }
             }
           });
 
-          // Determinar tempo a ser lançado: tempo médio se houver dados, senão tempo estimado
-          let tempoParaLancar = tempoEst;
-          if (qtdConclusoes > 0 && somaTemposRealizados > 0) {
-            const tempoMedioCalculado = Math.round(somaTemposRealizados / qtdConclusoes);
-            if (tempoMedioCalculado > 0) {
-              tempoParaLancar = tempoMedioCalculado;
-            }
+          // Pega o tempo médio da aba missões se houver, caso contrário usa o tempo estimado
+          let tempoParaLancar = "";
+          const tMedioNum = parseFloat(tempoMedio);
+          const tEstNum = parseFloat(tempoEst);
+
+          if (!isNaN(tMedioNum) && tMedioNum > 0) {
+            tempoParaLancar = tMedioNum;
+          } else if (!isNaN(tEstNum) && tEstNum > 0) {
+            tempoParaLancar = tEstNum;
+          } else {
+            tempoParaLancar = 15;
           }
 
           let deveLancar = true;
