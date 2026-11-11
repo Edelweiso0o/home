@@ -490,73 +490,6 @@ async function cadastrarMissao(event) {
     });
 }
 
-function abrirModalFrequencias() {
-    const modal = document.getElementById('modalFrequencias');
-    const container = document.getElementById('listaConfigFrequencias');
-    if (!modal || !container) return;
-
-    const unicasBase = {};
-    missoes.forEach(m => {
-        let tituloBaseClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-        if (!unicasBase[tituloBaseClean]) {
-            unicasBase[tituloBaseClean] = m;
-        }
-    });
-
-    const lista = Object.values(unicasBase);
-    if (lista.length === 0) {
-        container.innerHTML = `<p class="text-xs text-purple-300/50 p-3 text-center">Nenhuma missão cadastrada.</p>`;
-    } else {
-        container.innerHTML = lista.map(m => `
-            <div class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                    <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
-                    <p class="text-[10px] text-purple-300/60">${m.comodo} • Prioridade: ${m.prioridade}</p>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <select id="selectFreq_${m.id}" onchange="salvarFrequenciaMissao('${m.titulo}', this.value)" class="bg-[#17112d] border border-purple-800/80 rounded-lg px-2.5 py-1 text-xs text-white font-mono-code focus:outline-none focus:border-purple-500">
-                        <option value="1" ${m.frequenciaDias == 1 ? 'selected' : ''}>Todos os dias (1 dia)</option>
-                        <option value="2" ${m.frequenciaDias == 2 ? 'selected' : ''}>Um dia sim, um dia não (2 dias)</option>
-                        <option value="3" ${m.frequenciaDias == 3 ? 'selected' : ''}>A cada 3 dias</option>
-                        <option value="4" ${m.frequenciaDias == 4 ? 'selected' : ''}>A cada 4 dias</option>
-                        <option value="5" ${m.frequenciaDias == 5 ? 'selected' : ''}>A cada 5 dias</option>
-                        <option value="7" ${m.frequenciaDias == 7 ? 'selected' : ''}>Uma vez por semana (7 dias)</option>
-                        <option value="15" ${m.frequenciaDias == 15 ? 'selected' : ''}>A cada 15 dias</option>
-                        <option value="30" ${m.frequenciaDias == 30 ? 'selected' : ''}>Uma vez por mês (30 dias)</option>
-                    </select>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    modal.classList.remove('hidden');
-}
-
-function fecharModalFrequencias() {
-    const modal = document.getElementById('modalFrequencias');
-    if (modal) modal.classList.add('hidden');
-}
-
-async function salvarFrequenciaMissao(tituloTarget, novaFreq) {
-    const freqNum = parseInt(novaFreq, 10);
-    const tituloBase = tituloTarget.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-
-    missoes.forEach(m => {
-        if (m.titulo.startsWith(tituloBase)) {
-            m.frequenciaDias = freqNum;
-        }
-    });
-
-    salvarDadosLocalStorage();
-    renderizarVisaoAtual();
-    mostrarNotificacao("Frequência Atualizada", `Frequência de "${tituloBase}" alterada para ${freqNum} dia(s).`, "sucesso", 2000);
-
-    sincronizarComServidorEmSegundoPlano('atualizarFrequencia', {
-        titulo: tituloBase,
-        frequenciaDias: freqNum
-    });
-}
-
 function abrirModalDuplicarRapido() {
     const modal = document.getElementById('modalDuplicarRapido');
     const container = document.getElementById('listaOpcoesDuplicar');
@@ -649,6 +582,88 @@ function carregarUltimasPreferenciasSelects() {
     if (lastFreq) {
         const selF = document.getElementById('inputFrequencia');
         if (selF) selF.value = lastFreq;
+    }
+}
+
+function abrirModalGerenciarFrequencias() {
+    const modal = document.getElementById('modalGerenciarFrequencias');
+    const container = document.getElementById('listaConfigFrequencias');
+    if (!modal || !container) return;
+
+    // Agrupa por título base para listar tarefas únicas cadastradas
+    const unicasBase = {};
+    missoes.forEach(m => {
+        let tituloBaseClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+        if (!unicasBase[tituloBaseClean]) {
+            unicasBase[tituloBaseClean] = m;
+        }
+    });
+
+    const lista = Object.values(unicasBase);
+    if (lista.length === 0) {
+        container.innerHTML = `<p class="text-xs text-purple-300/50 p-4 text-center">Nenhuma missão cadastrada.</p>`;
+    } else {
+        container.innerHTML = lista.map(m => {
+            let tituloClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+            let freqAtual = m.frequenciaDias || 1;
+            return `
+                <div class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl flex items-center justify-between gap-3" data-titulo-base="${tituloClean}">
+                    <div>
+                        <h4 class="font-bold text-xs text-white">${tituloClean}</h4>
+                        <p class="text-[10px] text-purple-300/60">${m.comodo}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select class="select-frequencia-config bg-[#17112d] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white font-mono-code" data-titulo="${tituloClean}">
+                            <option value="1" ${freqAtual == 1 ? 'selected' : ''}>Todos os dias (1 dia)</option>
+                            <option value="2" ${freqAtual == 2 ? 'selected' : ''}>A cada 2 dias</option>
+                            <option value="3" ${freqAtual == 3 ? 'selected' : ''}>A cada 3 dias</option>
+                            <option value="4" ${freqAtual == 4 ? 'selected' : ''}>A cada 4 dias</option>
+                            <option value="5" ${freqAtual == 5 ? 'selected' : ''}>A cada 5 dias</option>
+                            <option value="7" ${freqAtual == 7 ? 'selected' : ''}>A cada 7 dias</option>
+                            <option value="15" ${freqAtual == 15 ? 'selected' : ''}>A cada 15 dias</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function fecharModalGerenciarFrequencias() {
+    const modal = document.getElementById('modalGerenciarFrequencias');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function salvarTodasFrequencias() {
+    const selects = document.querySelectorAll('.select-frequencia-config');
+    const atualizacoes = [];
+
+    selects.forEach(sel => {
+        const tituloBase = sel.getAttribute('data-titulo');
+        const novaFreq = parseInt(sel.value, 10);
+
+        missoes.forEach(m => {
+            let tClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+            if (tClean === tituloBase) {
+                m.frequenciaDias = novaFreq;
+                atualizacoes.push({ titulo: m.titulo, frequenciaDias: novaFreq });
+            }
+        });
+    });
+
+    salvarDadosLocalStorage();
+    renderizarVisaoAtual();
+    fecharModalGerenciarFrequencias();
+    mostrarNotificacao("Sucesso", "Frequências atualizadas com sucesso.", "sucesso", 2000);
+
+    // Sincroniza cada alteração de frequência com o servidor
+    for (let item of atualizacoes) {
+        sincronizarComServidorEmSegundoPlano('editarFrequencia', {
+            titulo: item.titulo,
+            frequenciaDias: item.frequenciaDias
+        });
     }
 }
 
