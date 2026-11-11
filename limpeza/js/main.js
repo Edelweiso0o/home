@@ -1749,6 +1749,8 @@ async function salvarTodasFrequencias() {
 let somFolgaLigado = false;
 let audioCtxFolga = null;
 let particulasRodando = false;
+let somFolgaNodes = null;
+let somFolgaTimer = null;
 
 function atualizarPainelFolga() {
     const c = cicloFolgaAtual;
@@ -1812,12 +1814,13 @@ function atualizarPainelFolga() {
         if (fundo) fundo.classList.remove('hidden');
         if (card) card.classList.add('card-folga-ativa');
         iniciarParticulasFolga();
-        if (somFolgaLigado) tocarSomFolga();
+        if (somFolgaLigado) iniciarSomFolga();
     } else {
         if (banner) banner.classList.add('hidden');
         if (fundo) fundo.classList.add('hidden');
         if (card) card.classList.remove('card-folga-ativa');
         pararParticulasFolga();
+        pararSomFolga();
     }
 }
 
@@ -1871,41 +1874,72 @@ function pararParticulasFolga() {
 }
 
 // Som relaxante gerado na hora (sem arquivo). Acorde suave com fade-in/out.
-function tocarSomFolga() {
+// Som ambiente de folga: pad continuo gerado por Web Audio (sem arquivo).
+// Um acorde suave que respira, com osciladores em loop.
+function iniciarSomFolga() {
     try {
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (!Ctx) return;
         if (!audioCtxFolga) audioCtxFolga = new Ctx();
         const ctx = audioCtxFolga;
         if (ctx.state === 'suspended') ctx.resume();
+        if (somFolgaNodes) return;
 
-        const agora = ctx.currentTime;
-        const dur = 5.0;
         const master = ctx.createGain();
-        master.gain.setValueAtTime(0.0001, agora);
-        master.gain.exponentialRampToValueAtTime(0.16, agora + 1.2);
-        master.gain.exponentialRampToValueAtTime(0.0001, agora + dur);
+        master.gain.setValueAtTime(0.0001, ctx.currentTime);
+        master.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + 2.5);
         master.connect(ctx.destination);
 
-        // Acorde maior suave (Dó maior com nona): C4, E4, G4, D5
-        const notas = [261.63, 329.63, 392.00, 587.33];
+        // C9: Dó, Mi, Sol, Ré (uma oitava acima) - acorde aberto e relaxante
+        const notas = [130.81, 196.00, 261.63, 293.66, 392.00];
+        const oscs = [];
+
         notas.forEach((freq, i) => {
             const osc = ctx.createOscillator();
             const g = ctx.createGain();
-            osc.type = i === 3 ? 'sine' : 'triangle';
-            osc.frequency.setValueAtTime(freq, agora);
-            // leve desafinação para soar orgânico
-            osc.detune.setValueAtTime((Math.random() - 0.5) * 6, agora);
-            g.gain.setValueAtTime(0.0001, agora);
-            g.gain.exponentialRampToValueAtTime(0.22 / (i + 1), agora + 0.8 + i * 0.25);
-            g.gain.exponentialRampToValueAtTime(0.0001, agora + dur - 0.4);
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            osc.detune.value = (Math.random() - 0.5) * 8;
+            g.gain.value = 0.3 / (i + 1);
+
+            // LFO lento faz o volume respirar
+            const lfo = ctx.createOscillator();
+            const lfoGain = ctx.createGain();
+            lfo.frequency.value = 0.05 + Math.random() * 0.09;
+            lfoGain.gain.value = 0.12 / (i + 1);
+            lfo.connect(lfoGain);
+            lfoGain.connect(g.gain);
+            lfo.start();
+
             osc.connect(g);
             g.connect(master);
-            osc.start(agora);
-            osc.stop(agora + dur);
+            osc.start();
+
+            oscs.push(osc, lfo);
         });
+
+        somFolgaNodes = { master, oscs };
     } catch (e) {
-        console.error('[tocarSomFolga]', e);
+        console.error('[iniciarSomFolga]', e);
+    }
+}
+
+function pararSomFolga() {
+    try {
+        if (!somFolgaNodes || !audioCtxFolga) return;
+        const { master, oscs } = somFolgaNodes;
+        const agora = audioCtxFolga.currentTime;
+        master.gain.cancelScheduledValues(agora);
+        master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), agora);
+        master.gain.exponentialRampToValueAtTime(0.0001, agora + 1.2);
+        const paraParar = oscs;
+        setTimeout(() => {
+            paraParar.forEach(o => { try { o.stop(); } catch (e) {} });
+            try { master.disconnect(); } catch (e) {}
+        }, 1400);
+        somFolgaNodes = null;
+    } catch (e) {
+        console.error('[pararSomFolga]', e);
     }
 }
 
@@ -1919,7 +1953,8 @@ function alternarSomFolga() {
             ? 'px-3 py-1.5 rounded-xl text-xs font-mono-code bg-amber-400/30 hover:bg-amber-400/40 text-amber-100 border border-amber-400/60 transition flex items-center space-x-1.5'
             : 'px-3 py-1.5 rounded-xl text-xs font-mono-code bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition flex items-center space-x-1.5';
     }
-    if (somFolgaLigado) tocarSomFolga();
+    if (somFolgaLigado) iniciarSomFolga();
+    else pararSomFolga();
 }
 
 function abrirModalConfigFolga() {
