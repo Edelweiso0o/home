@@ -1094,3 +1094,134 @@ function carregarDadosLocalStorage() {
     }
     atualizarDisplaysPonto();
 }
+/* ===== Gerenciamento de Frequências ===== */
+
+const OPCOES_FREQUENCIA = [
+    { valor: 1, rotulo: 'Todos os dias' },
+    { valor: 2, rotulo: 'A cada 2 dias' },
+    { valor: 3, rotulo: 'A cada 3 dias' },
+    { valor: 4, rotulo: 'A cada 4 dias' },
+    { valor: 5, rotulo: 'A cada 5 dias' },
+    { valor: 7, rotulo: 'A cada 7 dias' },
+    { valor: 15, rotulo: 'A cada 15 dias' }
+];
+
+function abrirModalGerenciarFrequencias() {
+    const modal = document.getElementById('modalGerenciarFrequencias');
+    const container = document.getElementById('listaConfigFrequencias');
+    if (!modal || !container) return;
+
+    // Agrupa por título-base, mantendo apenas a missão mais recente de cada
+    const unicas = {};
+    missoes.forEach(m => {
+        if (!m.titulo) return;
+        const base = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+        const chave = base.toLowerCase();
+        if (!unicas[chave] || (m.frequenciaDias || 1) > (unicas[chave].frequenciaDias || 1)) {
+            unicas[chave] = m;
+        }
+    });
+
+    const lista = Object.values(unicas).sort((a, b) =>
+        a.comodo.localeCompare(b.comodo) || a.titulo.localeCompare(b.titulo)
+    );
+
+    if (lista.length === 0) {
+        container.innerHTML = '<p class="text-xs text-purple-300/50 text-center py-6">Nenhuma missão encontrada.</p>';
+        modal.classList.remove('hidden');
+        return;
+    }
+
+    const freqAtual = parseInt(document.getElementById('inputFrequencia') ? document.getElementById('inputFrequencia').value : 1, 10) || 1;
+
+    container.innerHTML = lista.map(m => {
+        const freq = parseInt(m.frequenciaDias, 10) || 1;
+        // Se a frequência atual não estiver na lista de opções, inclui como opção extra
+        const opcoes = OPCOES_FREQUENCIA.slice();
+        if (!opcoes.some(o => o.valor === freq)) {
+            opcoes.push({ valor: freq, rotulo: `A cada ${freq} dias` });
+            opcoes.sort((a, b) => a.valor - b.valor);
+        }
+        const tituloEscapado = m.titulo.replace(/"/g, '&quot;');
+
+        return `
+            <div class="flex items-center justify-between gap-3 bg-[#090614] border border-purple-900/60 rounded-xl px-3 py-2">
+                <div class="min-w-0 flex-grow">
+                    <div class="text-xs font-bold text-white truncate">${m.titulo}</div>
+                    <div class="text-[10px] text-purple-300/60 font-mono-code">${m.comodo || 'Sem cômodo'}</div>
+                </div>
+                <select data-titulo="${tituloEscapado}" class="bg-[#17112d] border border-purple-900/80 rounded-lg px-2 py-1 text-xs text-white shrink-0">
+                    ${opcoes.map(o => `<option value="${o.valor}"${o.valor === freq ? ' selected' : ''}>${o.rotulo}</option>`).join('')}
+                </select>
+            </div>
+        `;
+    }).join('');
+
+    modal.classList.remove('hidden');
+}
+
+function fecharModalGerenciarFrequencias() {
+    const modal = document.getElementById('modalGerenciarFrequencias');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function salvarTodasFrequencias() {
+    const container = document.getElementById('listaConfigFrequencias');
+    if (!container) return;
+
+    const selects = container.querySelectorAll('select[data-titulo]');
+    if (selects.length === 0) {
+        fecharModalGerenciarFrequencias();
+        return;
+    }
+
+    const alteracoes = [];
+    selects.forEach(sel => {
+        const titulo = sel.getAttribute('data-titulo');
+        const novaFreq = parseInt(sel.value, 10) || 1;
+        const missao = missoes.find(m => m.titulo === titulo);
+        const freqAntiga = missao ? (parseInt(missao.frequenciaDias, 10) || 1) : null;
+        if (freqAntiga !== null && freqAntiga !== novaFreq) {
+            alteracoes.push({ titulo, frequenciaDias: novaFreq });
+        }
+    });
+
+    if (alteracoes.length === 0) {
+        mostrarNotificacao("Sem alterações", "Nenhuma frequência foi modificada.", "info", 2000);
+        fecharModalGerenciarFrequencias();
+        return;
+    }
+
+    // Atualiza o estado local na hora, para a tela responder imediatamente
+    alteracoes.forEach(a => {
+        missoes.forEach(m => {
+            if (m.titulo === a.titulo) m.frequenciaDias = a.frequenciaDias;
+        });
+    });
+    salvarDadosLocalStorage();
+
+    fecharModalGerenciarFrequencias();
+    mostrarNotificacao("Salvando", `Atualizando ${alteracoes.length} frequência(s)...`, "sincronizando", 2000);
+
+    try {
+        const resultados = await Promise.all(alteracoes.map(a =>
+            fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ acao: 'editarFrequencia', titulo: a.titulo, frequenciaDias: a.frequenciaDias })
+            }).then(r => r.json()).catch(() => ({ status: 'error' }))
+        ));
+
+        const falhas = resultados.filter(r => !r || r.status !== 'success').length;
+
+        if (falhas === 0) {
+            mostrarNotificacao("Sucesso", `${alteracoes.length} frequência(s) atualizada(s).`, "sucesso", 2500);
+        } else {
+            mostrarNotificacao("Atenção", `${falhas} de ${alteracoes.length} não foram salvas no servidor.`, "aviso", 4000);
+        }
+        carregarDadosDoServidor(false);
+    } catch (erro) {
+        console.error("Erro ao salvar frequências:", erro);
+        mostrarNotificacao("Erro", "Não foi possível salvar as frequências.", "aviso", 4000);
+    }
+}
