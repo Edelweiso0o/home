@@ -72,8 +72,8 @@
                 <div class="flex items-center space-x-3">
                     <div class="text-3xl animate-bounce-slow">🌴</div>
                     <div>
-                        <div class="text-sm font-black uppercase tracking-widest text-amber-300 font-mono-code">Hoje é dia de folga</div>
-                        <div class="text-[11px] text-amber-200/70 font-mono-code mt-0.5">Nenhuma missão foi lançada. Aproveita.</div>
+                        <div class="text-sm font-black uppercase tracking-widest text-amber-300 font-mono-code" id="bannerFolgaTitulo">Hoje é dia de folga</div>
+                        <div class="text-[11px] text-amber-200/70 font-mono-code mt-0.5" id="bannerFolgaSub">Nenhuma missão foi lançada. Aproveita.</div>
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
@@ -83,30 +83,54 @@
                     <button onclick="trabalharNaFolga()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-200 border border-purple-800/60 transition">
                         Trabalhar mesmo assim
                     </button>
+                    <button onclick="encerrarTesteFolga()" id="btnEncerrarTeste" class="hidden px-3 py-1.5 rounded-xl text-xs font-mono-code bg-amber-400/25 hover:bg-amber-400/35 text-amber-100 border border-amber-400/50 transition">
+                        Encerrar teste
+                    </button>
                 </div>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-            <div class="bg-[#17112d] border border-purple-900/50 p-4 rounded-2xl flex justify-between items-center">
-                <div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block" id="labelTurnoTitulo">Tempo em Turno</span>
-                    <div class="text-xl font-black font-mono-code text-white mt-1" id="timerTurnoActual">00:00:00</div>
-                </div>
-                <div class="text-right">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Término Estimado</span>
-                    <div class="text-base font-bold font-mono-code text-amber-300 mt-1" id="statPrevisaoTermino">--:--</div>
+            <div class="bg-[#17112d] border border-purple-900/50 p-4 rounded-2xl">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block" id="labelTurnoTitulo">Tempo em Turno</span>
+                        <div class="text-xl font-black font-mono-code text-white mt-1" id="timerTurnoActual">00:00:00</div>
+                        <span class="text-[10px] text-purple-300/50 font-mono-code">Término <span class="text-amber-300 font-bold" id="statPrevisaoTermino">--:--</span></span>
+                    </div>
+                    <div class="border-l border-purple-900/50 pl-3">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Tempo Ganho</span>
+                        <div class="text-xl font-black font-mono-code text-emerald-400 mt-1" id="coinsBalance">0s</div>
+                        <span class="text-[10px] text-purple-300/50 font-mono-code">Restante <span class="text-indigo-300 font-bold" id="statTempoPrevisto">0 min</span></span>
+                    </div>
                 </div>
             </div>
 
-            <div class="bg-[#17112d] border border-purple-900/50 p-4 rounded-2xl flex justify-between items-center">
-                <div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Tempo Ganho (Crédito)</span>
-                    <div class="text-xl font-black font-mono-code text-emerald-400 mt-1" id="coinsBalance">0s</div>
+            <!-- Ciclo de Folga -->
+            <div id="cardCicloFolga" class="bg-[#17112d] border border-indigo-500/30 p-4 rounded-2xl space-y-2 transition-colors duration-500">
+                <div class="flex justify-between items-center border-b border-purple-900/40 pb-1.5">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-400 font-mono-code">Ciclo de Folga</span>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="testarFolga()" id="btnTestarFolga" class="text-amber-400/60 hover:text-amber-300 transition" title="Testar o dia de folga agora">
+                            <i class="fa-solid fa-flask text-xs"></i>
+                        </button>
+                        <button onclick="abrirModalConfigFolga()" class="text-indigo-400/70 hover:text-indigo-300 transition" title="Configurar ciclo de folga">
+                            <i class="fa-solid fa-gear text-xs"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="text-right">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Tempo Restante</span>
-                    <div class="text-base font-bold font-mono-code text-indigo-300 mt-1" id="statTempoPrevisto">0 min</div>
+                <div class="flex items-baseline justify-between">
+                    <div>
+                        <span class="text-2xl font-black font-mono-code text-white" id="folgaDiasTrabalhados">0</span>
+                        <span class="text-[10px] text-purple-300/60 font-mono-code" id="folgaDeTotal">/ 9 dias</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] text-purple-300/60 font-mono-code uppercase tracking-wider">Faltam</div>
+                        <div class="text-base font-bold font-mono-code text-indigo-300" id="folgaFaltam">9</div>
+                    </div>
+                </div>
+                <div class="w-full h-1.5 bg-[#090614] rounded-full overflow-hidden border border-purple-900/50">
+                    <div id="folgaBarra" class="h-full bg-gradient-to-r from-indigo-500 to-purple-400 rounded-full transition-all duration-700" style="width: 0%"></div>
                 </div>
             </div>
 
@@ -126,28 +150,6 @@
                 <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-mono-code text-purple-200/80" id="boxConcluidasPorComodo"></div>
             </div>
 
-            <!-- Ciclo de Folga -->
-            <div id="cardCicloFolga" class="bg-[#17112d] border border-indigo-500/30 p-4 rounded-2xl space-y-2 transition-colors duration-500">
-                <div class="flex justify-between items-center border-b border-purple-900/40 pb-1.5">
-                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-400 font-mono-code">Ciclo de Folga</span>
-                    <button onclick="abrirModalConfigFolga()" class="text-indigo-400/70 hover:text-indigo-300 transition" title="Configurar ciclo de folga">
-                        <i class="fa-solid fa-gear text-xs"></i>
-                    </button>
-                </div>
-                <div class="flex items-baseline justify-between">
-                    <div>
-                        <span class="text-2xl font-black font-mono-code text-white" id="folgaDiasTrabalhados">0</span>
-                        <span class="text-[10px] text-purple-300/60 font-mono-code" id="folgaDeTotal">/ 9 dias</span>
-                    </div>
-                    <div class="text-right">
-                        <div class="text-[10px] text-purple-300/60 font-mono-code uppercase tracking-wider">Faltam</div>
-                        <div class="text-base font-bold font-mono-code text-indigo-300" id="folgaFaltam">9</div>
-                    </div>
-                </div>
-                <div class="w-full h-1.5 bg-[#090614] rounded-full overflow-hidden border border-purple-900/50">
-                    <div id="folgaBarra" class="h-full bg-gradient-to-r from-indigo-500 to-purple-400 rounded-full transition-all duration-700" style="width: 0%"></div>
-                </div>
-            </div>
         </div>
 
         <div class="flex-grow flex flex-col space-y-3 overflow-hidden bg-[#17112d]/40 border border-purple-900/40 p-4 rounded-2xl">
