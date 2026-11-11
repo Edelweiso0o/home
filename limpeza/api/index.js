@@ -22,6 +22,47 @@ function getHoraAtualStr() {
   return new Intl.DateTimeFormat('pt-BR', options).format(d);
 }
 
+// A planilha pode devolver a data em tres formatos:
+//   "11/11/2026"  (texto)
+//   46327         (serial do Sheets, dias desde 30/12/1899)
+//   "2026-11-11"  (ISO)
+// Esta funcao normaliza qualquer um deles para "DD/MM/AAAA",
+// que e o formato usado em todas as comparacoes do sistema.
+function normalizarData(valor) {
+  if (valor === null || valor === undefined || valor === '') return '';
+
+  const bruto = String(valor).trim();
+  if (bruto === '') return '';
+
+  // Serial do Sheets (dias desde 30/12/1899, com o bug do ano bissexto de 1900).
+  // 25559 e o numero de dias entre essa epoca e 01/01/1970.
+  // Conferido contra a planilha: 46327 = 11/11/2026.
+  if (/^\d+(\.\d+)?$/.test(bruto)) {
+    const serial = parseFloat(bruto);
+    if (serial > 0 && serial < 100000) {
+      const ms = Math.round((serial - 25559) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return String(d.getUTCDate()).padStart(2, '0') + '/' +
+               String(d.getUTCMonth() + 1).padStart(2, '0') + '/' +
+               d.getUTCFullYear();
+      }
+    }
+  }
+
+  // ISO "2026-11-11" ou "2026-11-11T00:00:00"
+  const iso = bruto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+
+  // Ja em pt-BR: usa so a parte da data, caso venha hora junto
+  const ptBr = bruto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (ptBr) {
+    return String(ptBr[1]).padStart(2, '0') + '/' + String(ptBr[2]).padStart(2, '0') + '/' + ptBr[3];
+  }
+
+  return bruto;
+}
+
 function parseDataPtBrParaMs(dataStr) {
   if (!dataStr) return 0;
   const partes = String(dataStr).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -115,7 +156,7 @@ function normalizarStatusMissao(valor) {
 function selecionarMissao(dados, pedido, hojeStr) {
   const dataAlvo = String(pedido.data || hojeStr).trim();
   if (pedido.id === undefined || pedido.id === null || pedido.id === '') return null;
-  const candidatas = dados.filter(m => String(m.id) === String(pedido.id) && String(m.data).trim() === dataAlvo);
+  const candidatas = dados.filter(m => String(m.id) === String(pedido.id) && normalizarData(m.data) === normalizarData(dataAlvo));
   return candidatas.length === 1 ? candidatas[0] : null;
 }
 
@@ -132,7 +173,7 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
       obj[key] = row[colMap[key]] !== undefined ? row[colMap[key]] : '';
     });
     obj.id = obj["ID"] || obj["ID Turno"] || obj.id || "";
-    obj.data = obj["Data"] || "";
+    obj.data = normalizarData(obj["Data"] || "");
     obj.titulo = obj["Título da Missão"] || "";
     obj.comodo = obj["Cômodo"] || "";
     obj.tempoEstimado = obj["Tempo Estimado (Minutos)"] || obj["Tempo Est. (min)"] || "";
@@ -259,7 +300,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
 
     const missoesHojeNaPlanilha = pData.filter(row => {
       const dataVal = row[pColMap["Data"]] || "";
-      return String(dataVal).trim() === hojeStr;
+      return normalizarData(dataVal) === hojeStr;
     });
 
     let maxId = 999;
@@ -448,7 +489,7 @@ export default async function handler(req, res) {
 
       for (let i = turnos.length - 1; i >= 0; i--) {
         const t = turnos[i];
-        if (t.data === hojeStr) {
+        if (normalizarData(t.data) === hojeStr) {
           const st = (t["Status do Turno"] || "").toUpperCase();
           const hs = t["Hora Saída"] || "";
           if (st === "EM SERVIÇO" || !hs) {
@@ -519,7 +560,7 @@ export default async function handler(req, res) {
             const t = dadosPonto[i];
             const st = (t["Status do Turno"] || "").toUpperCase();
             const hs = t["Hora Saída"] || "";
-            if ((t.data === hojeStr || !t.data) && (st === "EM SERVIÇO" || !hs)) {
+            if ((normalizarData(t.data) === hojeStr || !t.data) && (st === "EM SERVIÇO" || !hs)) {
               linhaTurno = t._linha;
               break;
             }
@@ -629,7 +670,7 @@ export default async function handler(req, res) {
         // Verificar se já existe no Progresso Diário para o dia atual para evitar duplicatas
         const dataAlvo = data.data || hojeStr;
         const jaExisteProgresso = pParsed.dataRows.some(r => {
-          return String(r[pColMap["Data"]] || "").trim() === String(dataAlvo).trim() &&
+          return normalizarData(r[pColMap["Data"]]) === normalizarData(dataAlvo) &&
                  String(r[pColMap["Título da Missão"]] || "").trim().toLowerCase() === tituloDesejadoLower;
         });
 
@@ -714,7 +755,7 @@ export default async function handler(req, res) {
         const pDataRows = pParsed.dataRows;
 
         const candidatas = pDataRows.map((row, idx) => ({ row, linha: idx + pParsed.headerRowIndex + 2 }))
-          .filter(({ row }) => String(row[pColMap['ID']]) === String(data.id) && String(row[pColMap['Data']] || '').trim() === String(data.data || hojeStr).trim());
+          .filter(({ row }) => String(row[pColMap['ID']]) === String(data.id) && normalizarData(row[pColMap['Data']]) === normalizarData(data.data || hojeStr));
         const pLinhaAlvo = candidatas.length === 1 ? candidatas[0].linha : -1;
 
         if (pLinhaAlvo !== -1) {
