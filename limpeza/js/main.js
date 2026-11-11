@@ -841,6 +841,8 @@ async function cadastrarMissao(event) {
     const comodo = document.getElementById('selectComodo').value;
     const tempoEst = parseInt(document.getElementById('inputTempoEstimado').value, 10);
     const prioridade = document.getElementById('selectPrioridade').value;
+    const freqEl = document.getElementById('inputFrequencia');
+    const frequenciaDias = parseInt(freqEl ? freqEl.value : 1, 10) || 1;
     const missaoUnicaEl = document.getElementById('inputUnica');
     const missaoUnica = missaoUnicaEl ? missaoUnicaEl.checked : false;
 
@@ -857,6 +859,7 @@ async function cadastrarMissao(event) {
         titulo: titulo,
         comodo: comodo,
         tempoEstimado: tempoEst,
+        frequenciaDias: frequenciaDias,
         prioridade: prioridade,
         status: 'Pendente',
         estadoMissao: 'Pendente',
