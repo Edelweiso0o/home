@@ -1785,7 +1785,27 @@ function atualizarPainelFolga() {
     if (cfgUltima) cfgUltima.innerText = c.ultimaFolga || 'início';
     if (inputDias && document.activeElement !== inputDias) inputDias.value = total;
 
-    if (c.ehFolgaHoje) {
+    const ehFolgaVisivel = c.ehFolgaHoje || c.modoTeste === true;
+    const emTeste = c.modoTeste === true;
+
+    const bannerTitulo = document.getElementById('bannerFolgaTitulo');
+    const bannerSub = document.getElementById('bannerFolgaSub');
+    const btnEncerrar = document.getElementById('btnEncerrarTeste');
+    const btnTestar = document.getElementById('btnTestarFolga');
+
+    if (bannerTitulo) bannerTitulo.innerText = emTeste ? 'Modo teste: dia de folga' : 'Hoje é dia de folga';
+    if (bannerSub) bannerSub.innerText = emTeste
+        ? 'Simulação ativa. Nenhuma missão é lançada enquanto o teste estiver ligado.'
+        : 'Nenhuma missão foi lançada. Aproveita.';
+    if (btnEncerrar) btnEncerrar.classList.toggle('hidden', !emTeste);
+    if (btnTestar) {
+        btnTestar.className = emTeste
+            ? 'text-amber-300 hover:text-amber-200 transition'
+            : 'text-amber-400/60 hover:text-amber-300 transition';
+        btnTestar.title = emTeste ? 'Encerrar o teste de folga' : 'Testar o dia de folga agora';
+    }
+
+    if (ehFolgaVisivel) {
         if (banner) banner.classList.remove('hidden');
         if (card) card.classList.add('card-folga-ativa');
         iniciarParticulasFolga();
@@ -1941,6 +1961,38 @@ async function trabalharNaFolga() {
     } catch (e) {
         console.error('[trabalharNaFolga]', e);
         mostrarNotificacao("Erro", "Não foi possível pular a folga.", "aviso", 4000);
+    }
+}
+
+async function testarFolga() {
+    const estaTestando = cicloFolgaAtual && cicloFolgaAtual.modoTeste === true;
+    if (estaTestando) {
+        await encerrarTesteFolga();
+        return;
+    }
+    try {
+        const resposta = await sincronizarComServidorEmSegundoPlano('testarFolga', { ativo: true });
+        if (resposta && resposta.cicloFolga) {
+            cicloFolgaAtual = resposta.cicloFolga;
+            atualizarPainelFolga();
+        }
+        mostrarNotificacao("Modo teste", "Simulando um dia de folga. Nenhuma missão será lançada.", "atencao", 4000);
+    } catch (e) {
+        console.error('[testarFolga]', e);
+        mostrarNotificacao("Erro", "Não foi possível iniciar o teste.", "aviso", 4000);
+    }
+}
+
+async function encerrarTesteFolga() {
+    try {
+        const resposta = await sincronizarComServidorEmSegundoPlano('testarFolga', { ativo: false });
+        if (resposta && resposta.cicloFolga) {
+            cicloFolgaAtual = resposta.cicloFolga;
+            atualizarPainelFolga();
+        }
+        mostrarNotificacao("Teste encerrado", "Tudo volta ao normal.", "sucesso", 2500);
+    } catch (e) {
+        console.error('[encerrarTesteFolga]', e);
     }
 }
 
