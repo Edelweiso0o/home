@@ -259,6 +259,9 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
 
         if (!jaExisteHoje) {
           let ultimaConclusaoMs = 0;
+          let somaTemposRealizados = 0;
+          let qtdConclusoes = 0;
+
           pData.forEach(pRow => {
             const tVal = pRow[pColMap["Título da Missão"]] || "";
             const stVal = normalizarStatusMissao(pRow[pColMap["Status"]]);
@@ -266,8 +269,30 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (String(tVal).trim().toLowerCase() === String(titulo).trim().toLowerCase() && stVal === 'Concluído') {
               const dMs = parseDataPtBrParaMs(dataVal);
               if (dMs > ultimaConclusaoMs) ultimaConclusaoMs = dMs;
+              
+              // Tenta calcular o tempo real gasto se houver hora de início e término
+              const hInicio = String(pRow[pColMap["Hora de Início"]] || "").trim();
+              const hTermino = String(pRow[pColMap["Hora de Término"]] || "").trim();
+              if (hInicio && hTermino) {
+                const [hi, mi, si] = hInicio.split(':').map(Number);
+                const [ht, mt, st] = hTermino.split(':').map(Number);
+                const diffSec = (ht * 3600 + mt * 60 + (st || 0)) - (hi * 3600 + mi * 60 + (si || 0));
+                if (diffSec > 0) {
+                  somaTemposRealizados += diffSec / 60;
+                  qtdConclusoes++;
+                }
+              }
             }
           });
+
+          // Determinar tempo a ser lançado: tempo médio se houver dados, senão tempo estimado
+          let tempoParaLancar = tempoEst;
+          if (qtdConclusoes > 0 && somaTemposRealizados > 0) {
+            const tempoMedioCalculado = Math.round(somaTemposRealizados / qtdConclusoes);
+            if (tempoMedioCalculado > 0) {
+              tempoParaLancar = tempoMedioCalculado;
+            }
+          }
 
           let deveLancar = true;
           if (ultimaConclusaoMs > 0 && frequenciaDias > 1) {
@@ -285,8 +310,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (pColMap["Data"] !== undefined) rowArray[pColMap["Data"]] = hojeStr;
             if (pColMap["Título da Missão"] !== undefined) rowArray[pColMap["Título da Missão"]] = titulo;
             if (pColMap["Cômodo"] !== undefined) rowArray[pColMap["Cômodo"]] = comodo;
-            if (pColMap["Tempo Estimado (Minutos)"] !== undefined) rowArray[pColMap["Tempo Estimado (Minutos)"]] = tempoEst;
-            else if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoEst;
+            if (pColMap["Tempo Estimado (Minutos)"] !== undefined) rowArray[pColMap["Tempo Estimado (Minutos)"]] = tempoParaLancar;
+            else if (pColMap["Tempo Est. (min)"] !== undefined) rowArray[pColMap["Tempo Est. (min)"]] = tempoParaLancar;
             if (pColMap["Frequência (Dias)"] !== undefined) rowArray[pColMap["Frequência (Dias)"]] = frequenciaDias;
             if (pColMap["Prioridade"] !== undefined) rowArray[pColMap["Prioridade"]] = prioridade;
             if (pColMap["Status"] !== undefined) rowArray[pColMap["Status"]] = "Pendente";
