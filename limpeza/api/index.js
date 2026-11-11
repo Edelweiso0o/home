@@ -494,9 +494,17 @@ export default async function handler(req, res) {
         const tituloDesejado = String(data.titulo || "").trim();
         const tituloDesejadoLower = tituloDesejado.toLowerCase();
 
-        let missaoExistenteNaAba = mParsed.dataRows.find(r => String(r[mColMap["Título da Missão"]] || "").trim().toLowerCase() === tituloDesejadoLower);
+        // Repeticao: nao cadastra na aba Missoes, lanca apenas no Progresso Diario.
+        // Detectado de duas formas:
+        //   1) o front envia data.repeticao === true
+        //   2) o titulo ja vem com sufixo de repeticao (II, III, IV...)
+        const sufixoRepeticao = /\s(I{2,3}|IV|VI{0,3}|IX|X)$/i.test(tituloDesejado);
+        const ehRepeticao = data.repeticao === true || sufixoRepeticao;
 
-        if (!missaoExistenteNaAba) {
+        let missaoExistenteNaAba = ehRepeticao ? null
+          : mParsed.dataRows.find(r => String(r[mColMap["Título da Missão"]] || "").trim().toLowerCase() === tituloDesejadoLower);
+
+        if (!ehRepeticao && !missaoExistenteNaAba) {
           // Só adiciona na aba Missões se realmente não existir nenhuma com esse nome (garantindo que missões repetidas sejam únicas)
           let maxIdMissao = 999;
           mParsed.dataRows.forEach(r => {
