@@ -268,6 +268,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
     });
 
+    let nextRow = pRows.length + 1;
     let newRows = [];
     let currentId = maxId + 1;
 
@@ -352,7 +353,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     if (newRows.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: "Progresso Diário!A",
+        range: `Progresso Diário!A${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRows }
       });
@@ -492,6 +493,7 @@ export default async function handler(req, res) {
             if (!isNaN(idVal) && idVal > maxId) maxId = idVal;
           });
           const novoIdTurno = maxId + 1;
+          const nextRow = (resPonto.data.values || []).length + 1;
 
           let maxColIndex = Math.max(...Object.values(colMap), 0);
           let rowArray = new Array(maxColIndex + 1).fill("");
@@ -506,7 +508,7 @@ export default async function handler(req, res) {
 
           await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: "Registro de Ponto!A",
+            range: `Registro de Ponto!A${nextRow}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [rowArray] }
           });
@@ -597,6 +599,7 @@ export default async function handler(req, res) {
             if (!isNaN(idVal) && idVal > maxIdMissao) maxIdMissao = idVal;
           });
           const novoIdBase = maxIdMissao + 1;
+          const nextRowMissao = (missoesRes.data.values || []).length + 1;
 
           let maxColM = Math.max(...Object.values(mColMap), 0);
           let rowArrayM = new Array(maxColM + 1).fill("");
@@ -612,7 +615,7 @@ export default async function handler(req, res) {
 
           await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: "Missões!A",
+            range: `Missões!A${nextRowMissao}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [rowArrayM] }
           });
@@ -640,6 +643,7 @@ export default async function handler(req, res) {
           if (!isNaN(idVal) && idVal > maxIdProg) maxIdProg = idVal;
         });
         const novoIdProg = maxIdProg + 1;
+        const nextRowProg = (progRes.data.values || []).length + 1;
 
         let maxColP = Math.max(...Object.values(pColMap), 0);
         let rowArrayP = new Array(maxColP + 1).fill("");
@@ -656,7 +660,7 @@ export default async function handler(req, res) {
         try {
           await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: "Progresso Diário!A",
+            range: `Progresso Diário!A${nextRowProg}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [rowArrayP] }
           });
