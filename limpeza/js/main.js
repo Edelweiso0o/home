@@ -490,6 +490,73 @@ async function cadastrarMissao(event) {
     });
 }
 
+function abrirModalFrequencias() {
+    const modal = document.getElementById('modalFrequencias');
+    const container = document.getElementById('listaConfigFrequencias');
+    if (!modal || !container) return;
+
+    const unicasBase = {};
+    missoes.forEach(m => {
+        let tituloBaseClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+        if (!unicasBase[tituloBaseClean]) {
+            unicasBase[tituloBaseClean] = m;
+        }
+    });
+
+    const lista = Object.values(unicasBase);
+    if (lista.length === 0) {
+        container.innerHTML = `<p class="text-xs text-purple-300/50 p-3 text-center">Nenhuma missão cadastrada.</p>`;
+    } else {
+        container.innerHTML = lista.map(m => `
+            <div class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                    <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
+                    <p class="text-[10px] text-purple-300/60">${m.comodo} • Prioridade: ${m.prioridade}</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <select id="selectFreq_${m.id}" onchange="salvarFrequenciaMissao('${m.titulo}', this.value)" class="bg-[#17112d] border border-purple-800/80 rounded-lg px-2.5 py-1 text-xs text-white font-mono-code focus:outline-none focus:border-purple-500">
+                        <option value="1" ${m.frequenciaDias == 1 ? 'selected' : ''}>Todos os dias (1 dia)</option>
+                        <option value="2" ${m.frequenciaDias == 2 ? 'selected' : ''}>Um dia sim, um dia não (2 dias)</option>
+                        <option value="3" ${m.frequenciaDias == 3 ? 'selected' : ''}>A cada 3 dias</option>
+                        <option value="4" ${m.frequenciaDias == 4 ? 'selected' : ''}>A cada 4 dias</option>
+                        <option value="5" ${m.frequenciaDias == 5 ? 'selected' : ''}>A cada 5 dias</option>
+                        <option value="7" ${m.frequenciaDias == 7 ? 'selected' : ''}>Uma vez por semana (7 dias)</option>
+                        <option value="15" ${m.frequenciaDias == 15 ? 'selected' : ''}>A cada 15 dias</option>
+                        <option value="30" ${m.frequenciaDias == 30 ? 'selected' : ''}>Uma vez por mês (30 dias)</option>
+                    </select>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function fecharModalFrequencias() {
+    const modal = document.getElementById('modalFrequencias');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function salvarFrequenciaMissao(tituloTarget, novaFreq) {
+    const freqNum = parseInt(novaFreq, 10);
+    const tituloBase = tituloTarget.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+
+    missoes.forEach(m => {
+        if (m.titulo.startsWith(tituloBase)) {
+            m.frequenciaDias = freqNum;
+        }
+    });
+
+    salvarDadosLocalStorage();
+    renderizarVisaoAtual();
+    mostrarNotificacao("Frequência Atualizada", `Frequência de "${tituloBase}" alterada para ${freqNum} dia(s).`, "sucesso", 2000);
+
+    sincronizarComServidorEmSegundoPlano('atualizarFrequencia', {
+        titulo: tituloBase,
+        frequenciaDias: freqNum
+    });
+}
+
 function abrirModalDuplicarRapido() {
     const modal = document.getElementById('modalDuplicarRapido');
     const container = document.getElementById('listaOpcoesDuplicar');
@@ -595,7 +662,6 @@ function abrirModalEdicao(id) {
     const elComodo = document.getElementById('editSelectComodo');
     const elTempo = document.getElementById('editInputTempoEstimado');
     const elPrioridade = document.getElementById('editSelectPrioridade');
-    const elFrequencia = document.getElementById('editInputFrequencia');
 
     if (elId) elId.value = missao.id;
     if (elTituloOriginal) elTituloOriginal.value = missao.titulo;
@@ -603,7 +669,6 @@ function abrirModalEdicao(id) {
     if (elComodo) elComodo.value = missao.comodo;
     if (elTempo) elTempo.value = missao.tempoEstimado;
     if (elPrioridade) elPrioridade.value = missao.prioridade;
-    if (elFrequencia) elFrequencia.value = missao.frequenciaDias || 1;
 
     const modal = document.getElementById('modalEditarMissao');
     if (modal) modal.classList.remove('hidden');
@@ -626,13 +691,11 @@ async function salvarEdicaoMissao(event) {
     const comodoNovo = document.getElementById('editSelectComodo').value;
     const tempoNovo = parseInt(document.getElementById('editInputTempoEstimado').value, 10);
     const prioridadeNova = document.getElementById('editSelectPrioridade').value;
-    const frequenciaNova = parseInt(document.getElementById('editInputFrequencia').value || 1, 10);
 
     missao.titulo = tituloNovo;
     missao.comodo = comodoNovo;
     missao.tempoEstimado = tempoNovo;
     missao.prioridade = prioridadeNova;
-    missao.frequenciaDias = frequenciaNova;
 
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
@@ -644,8 +707,7 @@ async function salvarEdicaoMissao(event) {
         titulo: tituloNovo,
         comodo: comodoNovo,
         tempoEstimado: tempoNovo,
-        prioridade: prioridadeNova,
-        frequenciaDias: frequenciaNova
+        prioridade: prioridadeNova
     });
 }
 
