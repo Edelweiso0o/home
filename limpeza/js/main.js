@@ -183,6 +183,223 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderizarVisaoAtual();
 });
 
+// =====================================================================
+// PAINEL DE LINHAS DA PLANILHA
+// Permite ver as linhas reais de cada aba e excluir as que nao servem,
+// sem precisar abrir a planilha.
+// =====================================================================
+let painelLinhas = {
+    abas: [],
+    abaAtual: null,
+    selecionadas: new Set(),   // guarda "aba|linha"
+    carregando: false
+};
+
+async function abrirModalGerenciarLinhas() {
+    const modal = document.getElementById('modalGerenciarLinhas');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    painelLinhas.selecionadas.clear();
+    await carregarLinhasPainel();
+}
+
+function fecharModalGerenciarLinhas() {
+    const modal = document.getElementById('modalGerenciarLinhas');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function carregarLinhasPainel() {
+    const container = document.getElementById('tabelaLinhasContainer');
+    if (container) container.innerHTML = '<p class="text-xs text-purple-300/50 p-6 text-center">Carregando linhas da planilha...</p>';
+
+    painelLinhas.carregando = true;
+    try {
+        const resp = await fetch(API_URL + '?painel=linhas', { method: 'GET', redirect: 'follow' });
+        const json = await resp.json();
+
+        if (!json || json.status !== 'success') {
+            throw new Error((json && json.message) || 'Falha ao carregar');
+        }
+
+        painelLinhas.abas = json.abas || [];
+        if (!painelLinhas.abaAtual || !painelLinhas.abas.some(a => a.aba === painelLinhas.abaAtual)) {
+            painelLinhas.abaAtual = painelLinhas.abas.length > 0 ? painelLinhas.abas[0].aba : null;
+        }
+
+        renderizarAbasPainel();
+        renderizarTabelaLinhas();
+    } catch (err) {
+        console.error('Erro ao carregar painel de linhas:', err);
+        if (container) container.innerHTML = '<p class="text-xs text-red-400 p-6 text-center">Não foi possível carregar. Tente novamente.</p>';
+    } finally {
+        painelLinhas.carregando = false;
+    }
+}
+
+function renderizarAbasPainel() {
+    const box = document.getElementById('abasPainelLinhas');
+    if (!box) return;
+
+    box.innerHTML = painelLinhas.abas.map(a => {
+        const ativa = a.aba === painelLinhas.abaAtual;
+        const classes = ativa
+            ? 'bg-purple-600 text-white border-purple-500'
+            : 'bg-[#090614] text-purple-300 border-purple-900/60 hover:border-purple-500';
+        return `<button onclick="trocarAbaPainel('${a.aba.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl text-xs font-mono-code border transition ${classes}">
+            ${a.rotulo} <span class="opacity-60">(${a.linhas.length})</span>
+        </button>`;
+    }).join('');
+}
+
+function trocarAbaPainel(nomeAba) {
+    painelLinhas.abaAtual = nomeAba;
+    const busca = document.getElementById('buscaLinhas');
+    if (busca) busca.value = '';
+    renderizarAbasPainel();
+    renderizarTabelaLinhas();
+}
+
+function obterAbaAtual() {
+    return painelLinhas.abas.find(a => a.aba === painelLinhas.abaAtual) || null;
+}
+
+function renderizarTabelaLinhas() {
+    const container = document.getElementById('tabelaLinhasContainer');
+    if (!container) return;
+
+    const aba = obterAbaAtual();
+    if (!aba) {
+        container.innerHTML = '<p class="text-xs text-purple-300/50 p-6 text-center">Nenhuma aba carregada.</p>';
+        return;
+    }
+
+    const termo = String((document.getElementById('buscaLinhas') || {}).value || '').trim().toLowerCase();
+    const linhas = aba.linhas.filter(l =>
+        termo === '' || l.celulas.some(v => String(v).toLowerCase().includes(termo))
+    );
+
+    if (linhas.length === 0) {
+        container.innerHTML = '<p class="text-xs text-purple-300/50 p-6 text-center">Nenhuma linha encontrada.</p>';
+        atualizarContadorSelecionadas();
+        return;
+    }
+
+    const cabecalho = `
+        <tr class="bg-[#090614] sticky top-0 z-10">
+            <th class="p-2 text-left text-[10px] font-mono-code text-purple-400 border-b border-purple-900/60 w-10">
+                <input type="checkbox" onclick="marcarVisiveis(this.checked)" class="accent-purple-500 cursor-pointer">
+            </th>
+            <th class="p-2 text-left text-[10px] font-mono-code text-purple-400 border-b border-purple-900/60 whitespace-nowrap">Linha</th>
+            ${aba.colunas.map(col => `<th class="p-2 text-left text-[10px] font-mono-code text-purple-400 border-b border-purple-900/60 whitespace-nowrap">${col}</th>`).join('')}
+        </tr>`;
+
+    const corpo = linhas.map(l => {
+        const chave = aba.aba + '|' + l.numeroLinha;
+        const marcada = painelLinhas.selecionadas.has(chave);
+        return `
+            <tr class="hover:bg-purple-900/20 transition ${marcada ? 'bg-red-950/30' : ''}">
+                <td class="p-2 border-b border-purple-900/30">
+                    <input type="checkbox" ${marcada ? 'checked' : ''} onchange="alternarSelecaoLinha('${chave.replace(/'/g, "\\'")}', this.checked)" class="accent-red-500 cursor-pointer">
+                </td>
+                <td class="p-2 border-b border-purple-900/30 text-[11px] font-mono-code text-purple-400">${l.numeroLinha}</td>
+                ${l.celulas.map(v => `<td class="p-2 border-b border-purple-900/30 text-[11px] text-purple-100/90 max-w-[220px] truncate" title="${String(v).replace(/"/g, '&quot;')}">${v === '' ? '<span class="text-purple-500/30">—</span>' : String(v)}</td>`).join('')}
+            </tr>`;
+    }).join('');
+
+    container.innerHTML = `<table class="w-full border-collapse">${cabecalho}${corpo}</table>`;
+    atualizarContadorSelecionadas();
+}
+
+function filtrarLinhasPainel() {
+    renderizarTabelaLinhas();
+}
+
+function alternarSelecaoLinha(chave, marcada) {
+    if (marcada) painelLinhas.selecionadas.add(chave);
+    else painelLinhas.selecionadas.delete(chave);
+    renderizarTabelaLinhas();
+}
+
+function marcarVisiveis(marcar) {
+    const aba = obterAbaAtual();
+    if (!aba) return;
+
+    const termo = String((document.getElementById('buscaLinhas') || {}).value || '').trim().toLowerCase();
+    aba.linhas
+        .filter(l => termo === '' || l.celulas.some(v => String(v).toLowerCase().includes(termo)))
+        .forEach(l => {
+            const chave = aba.aba + '|' + l.numeroLinha;
+            if (marcar) painelLinhas.selecionadas.add(chave);
+            else painelLinhas.selecionadas.delete(chave);
+        });
+
+    renderizarTabelaLinhas();
+}
+
+function alternarTodasLinhas() {
+    const aba = obterAbaAtual();
+    if (!aba) return;
+    const todasMarcadas = aba.linhas.every(l => painelLinhas.selecionadas.has(aba.aba + '|' + l.numeroLinha));
+    marcarVisiveis(!todasMarcadas);
+}
+
+function atualizarContadorSelecionadas() {
+    const total = painelLinhas.selecionadas.size;
+    const contador = document.getElementById('contadorSelecionadas');
+    const botao = document.getElementById('btnExcluirLinhas');
+    const btnTodas = document.getElementById('btnMarcarTodas');
+
+    if (contador) contador.textContent = total + ' selecionada(s)';
+    if (botao) botao.disabled = total === 0;
+
+    const aba = obterAbaAtual();
+    if (btnTodas && aba) {
+        const todas = aba.linhas.length > 0 && aba.linhas.every(l => painelLinhas.selecionadas.has(aba.aba + '|' + l.numeroLinha));
+        btnTodas.textContent = todas ? 'Desmarcar todas' : 'Marcar todas';
+    }
+}
+
+async function excluirLinhasSelecionadas() {
+    const total = painelLinhas.selecionadas.size;
+    if (total === 0) return;
+
+    const resumo = {};
+    painelLinhas.selecionadas.forEach(chave => {
+        const [aba, linha] = chave.split('|');
+        resumo[aba] = (resumo[aba] || 0) + 1;
+    });
+
+    const detalhe = Object.keys(resumo).map(a => `• ${a}: ${resumo[a]} linha(s)`).join('\n');
+
+    if (!confirm(`Excluir ${total} linha(s) da planilha?\n\n${detalhe}\n\nEsta ação não pode ser desfeita.`)) return;
+
+    const itens = Array.from(painelLinhas.selecionadas).map(chave => {
+        const partes = chave.split('|');
+        return { aba: partes[0], linha: parseInt(partes[1], 10) };
+    });
+
+    try {
+        const resp = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ acao: 'excluirLinhas', itens: itens })
+        });
+        const json = await resp.json();
+
+        if (json && json.status === 'success') {
+            painelLinhas.selecionadas.clear();
+            mostrarNotificacao("Sucesso", `${total} linha(s) excluída(s).`, "sucesso", 2500);
+            await carregarLinhasPainel();
+            await carregarDadosDoServidor(false);
+        } else {
+            mostrarNotificacao("Erro", (json && json.message) || "Não foi possível excluir.", "erro", 3000);
+        }
+    } catch (err) {
+        console.error('Erro ao excluir linhas:', err);
+        mostrarNotificacao("Erro", "Falha de conexão ao excluir.", "erro", 3000);
+    }
+}
+
 async function carregarDadosDoServidor(forcarVerificacao = true) {
     const inicioMs = performance.now();
     mostrarLoader(true);
