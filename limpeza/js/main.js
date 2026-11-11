@@ -518,7 +518,7 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
 
     try {
         let urlFinal = API_URL + '?verificarLancamento=' + (forcarVerificacao ? 'sim' : 'sim');
-        const response = await fetch(urlFinal, { method: 'GET', redirect: 'follow' });
+        const response = await chamarAPI(urlFinal, { method: 'GET', redirect: 'follow' });
         const data = await response.json();
         
         const fimMs = performance.now();
