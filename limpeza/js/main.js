@@ -456,22 +456,29 @@ function abrirModalDuplicarRapido() {
     const container = document.getElementById('listaOpcoesDuplicar');
     if (!modal || !container) return;
 
+    const hojeStr = obterDataHojeStr();
     const unicasBase = {};
-    missoes.forEach(m => {
-        let tituloBaseClean = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-        if (!unicasBase[tituloBaseClean]) {
-            unicasBase[tituloBaseClean] = m;
-        }
-    });
+
+    // Somente missoes de HOJE. A chave inclui o comodo, para nao misturar
+    // "Juntar o lixo" do Quarto com "Juntar o lixo" da Sala.
+    missoes
+        .filter(m => String(m.data || hojeStr).trim() === hojeStr)
+        .forEach(m => {
+            const tituloBaseClean = String(m.titulo || '').replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+            const chave = tituloBaseClean.toLowerCase() + '|' + String(m.comodo || '').trim().toLowerCase();
+            if (!unicasBase[chave]) {
+                unicasBase[chave] = { ...m, _tituloBase: tituloBaseClean };
+            }
+        });
 
     const lista = Object.values(unicasBase);
     if (lista.length === 0) {
-        container.innerHTML = `<p class="text-xs text-purple-300/50 p-3 text-center">Nenhuma missão disponível para repetir.</p>`;
+        container.innerHTML = `<p class="text-xs text-purple-300/50 p-3 text-center">Nenhuma missão de hoje disponível para repetir.</p>`;
     } else {
         container.innerHTML = lista.map(m => `
-            <div onclick="duplicarMissaoPorTitulo('${m.titulo}')" class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl hover:border-purple-500 cursor-pointer transition flex justify-between items-center">
+            <div onclick="duplicarMissaoPorTitulo('${String(m._tituloBase).replace(/'/g, "\\'")}', '${String(m.comodo || '').replace(/'/g, "\\'")}')" class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl hover:border-purple-500 cursor-pointer transition flex justify-between items-center">
                 <div>
-                    <h4 class="font-bold text-xs text-white">${m.titulo}</h4>
+                    <h4 class="font-bold text-xs text-white">${m._tituloBase}</h4>
                     <p class="text-[10px] text-purple-300/60">${m.comodo} • tempo missão: ${m.tempoEstimado} min</p>
                 </div>
                 <span class="text-xs bg-purple-600/20 text-purple-300 px-2.5 py-1 rounded-lg font-mono-code"><i class="fa-solid fa-plus mr-1"></i> Repetir</span>
@@ -487,33 +494,84 @@ function fecharModalDuplicarRapido() {
     if (modal) modal.classList.add('hidden');
 }
 
-async function duplicarMissaoPorTitulo(tituloOriginal) {
+async function duplicarMissaoPorTitulo(tituloOriginal, comodoOriginal) {
     fecharModalDuplicarRapido();
-    const missaoRef = missoes.find(m => m.titulo.startsWith(tituloOriginal));
-    if (!missaoRef) return;
 
     const hojeStr = obterDataHojeStr();
-    const tituloBase = missaoRef.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
+    const alvoLower = String(tituloOriginal || '').trim().toLowerCase();
+    const comodoAlvo = String(comodoOriginal || '').trim().toLowerCase();
+
+    // Busca apenas entre as missoes de HOJE, do mesmo comodo, com o titulo exato
+    // (ou titulo + sufixo romano). Evita pegar a missao de outro dia.
+    const missaoRef = missoes.find(m => {
+        if (String(m.data || hojeStr).trim() !== hojeStr) return false;
+        if (comodoAlvo && String(m.comodo || '').trim().toLowerCase() !== comodoAlvo) return false;
+        const base = String(m.titulo || '').replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim().toLowerCase();
+        return base === alvoLower;
+    });
+    if (!missaoRef) {
+        mostrarNotificacao("Aviso", "Missão de hoje não encontrada para repetir.", "erro", 2500);
+        return;
+    }
+
+    // --- Separar titulo base do sufixo romano ---
+    // "Juntar o lixo II" -> base "Juntar o lixo", romano 2
+    // "Juntar o lixo"    -> base "Juntar o lixo", romano 1  (a original conta como I)
+    const romanos = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
+                     'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
+
+    // Mapa numero -> romano, para nao depender da posicao do array
+    const intParaRomano = (n) => {
+        const tabela = [[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+        let resto = n, saida = '';
+        for (const [v, s] of tabela) {
+            while (resto >= v) { saida += s; resto -= v; }
+        }
+        return saida || 'I';
+    };
+
+    // Mapa romano -> numero
+    const romanoParaInt = (r) => {
+        const val = { I: 1, V: 5, X: 10, L: 50, C: 100 };
+        let total = 0, anterior = 0;
+        for (const ch of String(r).toUpperCase().split('').reverse()) {
+            const v = val[ch] || 0;
+            if (v < anterior) total -= v; else { total += v; anterior = v; }
+        }
+        return total;
+    };
+
+    const separarSufixo = (titulo) => {
+        const t = String(titulo || '').trim();
+        const m = t.match(/^(.*?)\s+([IVXLC]+)$/i);
+        if (!m) return { base: t, romano: 0 };   // sem sufixo: romano 0 = "original"
+        const n = romanoParaInt(m[2]);
+        if (n <= 0) return { base: t, romano: 0 };
+        return { base: m[1].trim(), romano: n };
+    };
+
+    const ref = separarSufixo(missaoRef.titulo);
+    const baseRef = ref.base;
+    const baseLower = baseRef.toLowerCase();
     const comodoRef = String(missaoRef.comodo || '').trim().toLowerCase();
 
-    // Conta apenas ocorrencias EXATAS no mesmo comodo:
-    // o titulo base, ou o titulo base seguido de sufixo romano de repeticao (II, III, IV...).
-    // Nao usa startsWith, para nao contar "Varrer o chao" dentro de "Varrer o chao da sala".
-    const baseLower = tituloBase.toLowerCase();
-    const escapaRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regexRepeticao = new RegExp('^' + escapaRegex(baseLower) + '\\s+(I{2,3}|IV|VI{0,3}|IX|X)$');
+    // --- Filtrar: 1) do dia  2) do mesmo comodo  3) mesmo titulo base ---
+    let maiorRomano = 0;
 
-    const ocorrenciasHoje = missoes.filter(m => {
-        const t = String(m.titulo || '').trim().toLowerCase();
-        const c = String(m.comodo || '').trim().toLowerCase();
-        if (c !== comodoRef) return false;
-        return t === baseLower || regexRepeticao.test(t);
+    missoes.forEach(m => {
+        if (String(m.data || '').trim() !== hojeStr) return;                 // 1) somente hoje
+        if (String(m.comodo || '').trim().toLowerCase() !== comodoRef) return; // 2) somente o comodo
+        const s = separarSufixo(m.titulo);
+        if (s.base.toLowerCase() !== baseLower) return;                       // 3) somente o titulo
+        // Original (sem sufixo) vale 1; "II" vale 2; "III" vale 3...
+        const peso = s.romano === 0 ? 1 : s.romano;
+        if (peso > maiorRomano) maiorRomano = peso;
     });
 
-    const romanos = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-    // 1a ocorrencia do dia (a original) => "II"; 2a => "III"; ...
-    const proximoSufixo = romanos[ocorrenciasHoje.length] || (ocorrenciasHoje.length + 1);
-    const tituloNovo = `${tituloBase} ${proximoSufixo}`;
+    // Proximo = maior encontrado + 1. Sem nenhuma ocorrencia -> "I".
+    const proximoNum = maiorRomano + 1;
+    const proximoSufixo = intParaRomano(proximoNum);
+    const tituloNovo = `${baseRef} ${proximoSufixo}`;
 
     const novaMissaoDuplicada = {
         id: Date.now(),
