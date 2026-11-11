@@ -382,8 +382,9 @@ function calcularCicloFolga(cfg, turnos, hojeStr) {
   // A folga e o dia SEGUINTE ao fechamento do ciclo.
   // Se voce bateu ponto hoje, o ciclo ja avancou hoje: hoje nao e folga.
   // Sem turno hoje e com o ciclo cheio, hoje e o dia de folga.
+  const modoTeste = String(cfg.modoTeste || '').toUpperCase() === 'TRUE';
   const cicloCheio = diasTrabalhados >= diasParaFolga;
-  const ehFolgaHoje = !puladaHoje && cicloCheio && !trabalhouHoje;
+  const ehFolgaHoje = modoTeste || (!puladaHoje && cicloCheio && !trabalhouHoje);
   const faltam = Math.max(0, diasParaFolga - diasTrabalhados);
 
   return {
@@ -391,6 +392,7 @@ function calcularCicloFolga(cfg, turnos, hojeStr) {
     diasTrabalhados: diasTrabalhados,
     faltam: faltam,
     cicloCheio: cicloCheio,
+    modoTeste: modoTeste,
     ehFolgaHoje: ehFolgaHoje,
     trabalhouHoje: trabalhouHoje,
     ultimaFolga: ultimaFolga,
@@ -660,6 +662,16 @@ export default async function handler(req, res) {
       const acao = data.acao;
       const hojeStr = getDataHojeStr();
 
+      if (acao === 'testarFolga') {
+        const ativo = data.ativo === true;
+        const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { modoTeste: ativo ? 'TRUE' : 'FALSE' });
+        const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        return res.status(200).json({
+          status: "success",
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+        });
+      }
+
       if (acao === 'salvarConfigFolga') {
         const novoValor = parseInt(data.diasParaFolga, 10);
         if (!Number.isFinite(novoValor) || novoValor < 1 || novoValor > 365) {
@@ -696,6 +708,16 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'baterPonto') {
+        // Bater ponto encerra o modo teste: se voce decidiu trabalhar, o teste acabou.
+        try {
+          const cfgAntes = await lerConfiguracoes(sheets, spreadsheetId);
+          if (String(cfgAntes.modoTeste || '').toUpperCase() === 'TRUE') {
+            await salvarConfiguracoes(sheets, spreadsheetId, { modoTeste: 'FALSE' });
+          }
+        } catch (eT) {
+          console.error("[baterPonto] falha ao encerrar modo teste:", eT && eT.message);
+        }
+
         const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A:Z" });
         const pParsed = parseSheetRows(resPonto.data.values || []);
         const colMap = pParsed.colMap;
