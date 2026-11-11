@@ -230,7 +230,10 @@ async function carregarLinhasPainel() {
         renderizarTabelaLinhas();
     } catch (err) {
         console.error('Erro ao carregar painel de linhas:', err);
-        if (container) container.innerHTML = '<p class="text-xs text-red-400 p-6 text-center">Não foi possível carregar. Tente novamente.</p>';
+        const msgErro = String(err && err.message || '') === 'NAO_AUTORIZADO'
+            ? 'Sessão expirada. Entre novamente para continuar.'
+            : 'Não foi possível carregar. Tente novamente.';
+        if (container) container.innerHTML = '<p class="text-xs text-red-400 p-6 text-center">' + msgErro + '</p>';
     } finally {
         painelLinhas.carregando = false;
     }
@@ -431,7 +434,12 @@ async function chamarAPI(url, opcoes = {}) {
     const resp = await fetch(url, opcoesFinais);
 
     if (resp.status === 401) {
-        abrirModalChave('Chave de acesso inválida. Digite novamente.');
+        // Se o modal ja esta aberto, nao reabre (evita loop com pedidos paralelos)
+        const modalAberto = document.getElementById('modalChaveAcesso');
+        const jaVisivel = modalAberto && !modalAberto.classList.contains('hidden');
+        if (!jaVisivel) {
+            abrirModalChave('Sessão expirada ou senha incorreta. Entre novamente.');
+        }
         throw new Error('NAO_AUTORIZADO');
     }
 
@@ -447,21 +455,35 @@ function abrirModalChave(mensagem) {
         modal.id = 'modalChaveAcesso';
         modal.className = 'fixed inset-0 w-screen h-screen bg-[#090614]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4';
         modal.innerHTML = `
-            <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <form id="formChaveAcesso" autocomplete="on" onsubmit="event.preventDefault(); confirmarChaveAcesso();"
+                  class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
                 <div class="border-b border-purple-900/50 pb-3">
                     <h3 class="text-sm font-bold text-white uppercase tracking-wider">
-                        <i class="fa-solid fa-lock text-purple-400 mr-2"></i>Chave de Acesso
+                        <i class="fa-solid fa-lock text-purple-400 mr-2"></i>Entrar
                     </h3>
                 </div>
                 <p id="chaveMensagem" class="text-xs text-purple-300/70"></p>
-                <input type="password" id="inputChaveAcesso" placeholder="Cole a chave aqui"
-                       class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-sm text-white placeholder-purple-400/40 focus:outline-none focus:border-purple-500"
-                       onkeydown="if(event.key==='Enter') confirmarChaveAcesso()">
+
+                <div class="space-y-1">
+                    <label for="inputUsuarioAcesso" class="text-[10px] font-mono-code text-purple-400 uppercase tracking-wider">Usuário</label>
+                    <input type="text" id="inputUsuarioAcesso" name="username" autocomplete="username"
+                           placeholder="seu usuário"
+                           class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-sm text-white placeholder-purple-400/40 focus:outline-none focus:border-purple-500">
+                </div>
+
+                <div class="space-y-1">
+                    <label for="inputChaveAcesso" class="text-[10px] font-mono-code text-purple-400 uppercase tracking-wider">Senha</label>
+                    <input type="password" id="inputChaveAcesso" name="password" autocomplete="current-password"
+                           placeholder="sua senha"
+                           class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-sm text-white placeholder-purple-400/40 focus:outline-none focus:border-purple-500">
+                </div>
+
                 <p id="erroChave" class="text-[11px] text-red-400 hidden"></p>
-                <button onclick="confirmarChaveAcesso()" class="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl text-xs font-mono-code font-bold transition">
+
+                <button type="submit" class="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl text-xs font-mono-code font-bold transition">
                     Entrar
                 </button>
-            </div>
+            </form>
         `;
         document.body.appendChild(modal);
     }
@@ -472,28 +494,41 @@ function abrirModalChave(mensagem) {
     const erro = modal.querySelector('#erroChave');
     if (erro) erro.classList.add('hidden');
 
-    const input = modal.querySelector('#inputChaveAcesso');
-    if (input) {
-        input.value = obterChaveAPI();
-        setTimeout(() => input.focus(), 50);
+    // O navegador pode preencher usuario e senha sozinho (senha salva no Chrome).
+    // Nao sobrescrevemos o campo com a chave antiga para nao atrapalhar o autofill.
+    const inputUsuario = modal.querySelector('#inputUsuarioAcesso');
+    const inputSenha = modal.querySelector('#inputChaveAcesso');
+
+    if (inputUsuario && !inputUsuario.value) {
+        inputUsuario.value = localStorage.getItem('cq_usuario') || '';
     }
+    if (inputSenha) inputSenha.value = '';
 
     modal.classList.remove('hidden');
+
+    setTimeout(() => {
+        if (inputUsuario && !inputUsuario.value) inputUsuario.focus();
+        else if (inputSenha) inputSenha.focus();
+    }, 80);
 }
 
 async function confirmarChaveAcesso() {
     const modal = document.getElementById('modalChaveAcesso');
     const input = document.getElementById('inputChaveAcesso');
+    const inputUsuario = document.getElementById('inputUsuarioAcesso');
     const erro = document.getElementById('erroChave');
     if (!modal || !input) return;
 
     const chave = input.value.trim();
+    const usuario = inputUsuario ? inputUsuario.value.trim() : '';
+
     if (!chave) {
-        if (erro) { erro.textContent = 'Digite a chave.'; erro.classList.remove('hidden'); }
+        if (erro) { erro.textContent = 'Digite a senha.'; erro.classList.remove('hidden'); }
         return;
     }
 
     salvarChaveAPI(chave);
+    if (usuario) localStorage.setItem('cq_usuario', usuario);
 
     // Testa a chave com um pedido leve
     try {
