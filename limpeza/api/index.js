@@ -61,6 +61,49 @@ function parseSheetRows(rows) {
   return { headerRowIndex: LINHA_CABECALHO, colMap, dataRows };
 }
 
+// Abas que o painel de exclusao pode manipular.
+// A ordem importa: e a mesma em que aparecem na tela.
+const ABAS_PAINEL = ["Missões", "Progresso Diário", "Registro de Ponto"];
+
+// Titulo amigavel de cada aba, para o front nao precisar traduzir.
+const ROTULO_ABA = {
+  "Missões": "Missões",
+  "Progresso Diário": "Progresso Diário",
+  "Registro de Ponto": "Registro de Ponto"
+};
+
+// Colunas que devem aparecer na previa de cada aba.
+const COLUNAS_PREVIA = {
+  "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade"],
+  "Progresso Diário": ["ID", "Data", "Título da Missão", "Cômodo", "Status", "Hora de Início", "Hora de Término"],
+  "Registro de Ponto": ["ID Turno", "Data", "Hora Entrada", "Hora Saída", "Tempo Trabalhado", "Status do Turno"]
+};
+
+// Le uma aba e devolve as linhas prontas para a previa, com o numero REAL da linha
+// na planilha (1-based), que e o que o deleteDimension precisa.
+async function lerAbaParaPainel(sheets, spreadsheetId, nomeAba) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${nomeAba}!A:Z` });
+  const rows = res.data.values || [];
+  const { colMap, dataRows } = parseSheetRows(rows);
+
+  const colunas = (COLUNAS_PREVIA[nomeAba] || []).filter(c => colMap[c] !== undefined);
+
+  const linhas = dataRows
+    .map((row, idx) => {
+      const numeroLinha = idx + LINHA_CABECALHO + 2; // 1-based, linha 3 em diante
+      const celulas = colunas.map(col => {
+        const v = row[colMap[col]];
+        return v === undefined || v === null ? "" : String(v);
+      });
+      // Considera vazia quando TODAS as colunas de previa estao em branco
+      const vazia = celulas.every(v => v.trim() === "");
+      return { numeroLinha, celulas, vazia };
+    })
+    .filter(l => !l.vazia); // linhas totalmente em branco nao aparecem
+
+  return { colunas, linhas, colMap };
+}
+
 function normalizarStatusMissao(valor) {
   const chave = String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '');
   if (['concluido', 'concluida', 'finalizado', 'finalizada'].includes(chave)) return 'Concluído';
@@ -349,6 +392,26 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
+      // Painel de exclusao: lista as linhas de uma aba (ou de todas)
+      if (String(req.query && req.query.painel || '') === 'linhas') {
+        const abaPedida = req.query.aba;
+        const abas = abaPedida ? [abaPedida] : ABAS_PAINEL;
+
+        const resultado = [];
+        for (const nomeAba of abas) {
+          if (!ABAS_PAINEL.includes(nomeAba)) continue;
+          const dados = await lerAbaParaPainel(sheets, spreadsheetId, nomeAba);
+          resultado.push({
+            aba: nomeAba,
+            rotulo: ROTULO_ABA[nomeAba] || nomeAba,
+            colunas: dados.colunas,
+            linhas: dados.linhas
+          });
+        }
+
+        return res.status(200).json({ status: "success", abas: resultado });
+      }
+
       await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
 
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
@@ -539,9 +602,6 @@ export default async function handler(req, res) {
         const pParsed = parseSheetRows(progRes.data.values || []);
         const pColMap = pParsed.colMap;
 
-        console.log('[adicionarMissao] colMap Progresso:', JSON.stringify(pColMap));
-        console.log('[adicionarMissao] recebido do front:', JSON.stringify(data));
-
         // Verificar se já existe no Progresso Diário para o dia atual para evitar duplicatas
         const dataAlvo = data.data || hojeStr;
         const jaExisteProgresso = pParsed.dataRows.some(r => {
@@ -573,16 +633,13 @@ export default async function handler(req, res) {
         if (pColMap["Prioridade"] !== undefined) rowArrayP[pColMap["Prioridade"]] = data.prioridade;
         if (pColMap["Status"] !== undefined) rowArrayP[pColMap["Status"]] = "Pendente";
 
-        console.log('[adicionarMissao] rowArrayP:', JSON.stringify(rowArrayP));
-
         try {
-          const appendRes = await sheets.spreadsheets.values.append({
+          await sheets.spreadsheets.values.append({
             spreadsheetId,
             range: `Progresso Diário!A${nextRowProg}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [rowArrayP] }
           });
-          console.log('[adicionarMissao] append OK, range atualizado:', appendRes.data.updates && appendRes.data.updates.updatedRange);
         } catch (errAppend) {
           console.error('[adicionarMissao] ERRO no append:', errAppend.message, errAppend.response && errAppend.response.data);
           throw errAppend;
@@ -684,6 +741,76 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json({ status: "success" });
+      }
+
+      if (acao === 'excluirLinhas') {
+        // data.itens = [{ aba: "Missões", linha: 12 }, ...]
+        const itens = Array.isArray(data.itens) ? data.itens : [];
+        if (itens.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'Nenhuma linha informada.' });
+        }
+
+        const meta = await sheets.spreadsheets.get({ spreadsheetId });
+
+        // Agrupa por aba para montar os ranges de exclusao
+        const porAba = {};
+        for (const item of itens) {
+          const nomeAba = String(item.aba || '').trim();
+          const linha = parseInt(item.linha, 10);
+          if (!ABAS_PAINEL.includes(nomeAba)) continue;
+          if (!Number.isFinite(linha) || linha < 3) continue; // nunca apaga cabecalho
+          if (!porAba[nomeAba]) porAba[nomeAba] = new Set();
+          porAba[nomeAba].add(linha);
+        }
+
+        const requests = [];
+        const resumo = [];
+
+        for (const nomeAba of Object.keys(porAba)) {
+          const sheet = meta.data.sheets.find(s => s.properties.title === nomeAba);
+          if (!sheet) continue;
+          const sheetId = sheet.properties.sheetId;
+
+          // Ordena do MAIOR para o MENOR: apagar de baixo para cima
+          // evita que uma exclusao desloque a linha seguinte.
+          const linhas = Array.from(porAba[nomeAba]).sort((a, b) => b - a);
+
+          // Junta linhas consecutivas num unico range, para gastar menos requests
+          const ranges = [];
+          let atual = null;
+          for (const linha of linhas) {
+            if (atual && atual.startIndex === linha) {
+              atual.startIndex = linha - 1;
+            } else {
+              if (atual) ranges.push(atual);
+              atual = { startIndex: linha - 1, endIndex: linha };
+            }
+          }
+          if (atual) ranges.push(atual);
+
+          for (const r of ranges) {
+            requests.push({
+              deleteDimension: {
+                range: { sheetId, dimension: "ROWS", startIndex: r.startIndex, endIndex: r.endIndex }
+              }
+            });
+          }
+
+          resumo.push({ aba: nomeAba, linhasRemovidas: linhas.length });
+        }
+
+        if (requests.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'Nenhuma linha válida para excluir.' });
+        }
+
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+
+        // Reaplica o formato nas abas afetadas
+        for (const nomeAba of Object.keys(porAba)) {
+          try { await formatarTabelaCompleta(sheets, spreadsheetId, nomeAba); } catch (e) { /* segue */ }
+        }
+
+        return res.status(200).json({ status: "success", resumo });
       }
 
       if (acao === 'excluirMissao') {
