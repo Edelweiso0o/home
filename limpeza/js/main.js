@@ -494,10 +494,25 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
 
     const hojeStr = obterDataHojeStr();
     const tituloBase = missaoRef.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-    const duplicatasExistentes = missoes.filter(m => m.data === hojeStr && m.titulo.startsWith(tituloBase));
-    
+    const comodoRef = String(missaoRef.comodo || '').trim().toLowerCase();
+
+    // Conta apenas ocorrencias EXATAS no mesmo comodo:
+    // o titulo base, ou o titulo base seguido de sufixo romano de repeticao (II, III, IV...).
+    // Nao usa startsWith, para nao contar "Varrer o chao" dentro de "Varrer o chao da sala".
+    const baseLower = tituloBase.toLowerCase();
+    const escapaRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regexRepeticao = new RegExp('^' + escapaRegex(baseLower) + '\\s+(I{2,3}|IV|VI{0,3}|IX|X)$');
+
+    const ocorrenciasHoje = missoes.filter(m => {
+        const t = String(m.titulo || '').trim().toLowerCase();
+        const c = String(m.comodo || '').trim().toLowerCase();
+        if (c !== comodoRef) return false;
+        return t === baseLower || regexRepeticao.test(t);
+    });
+
     const romanos = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-    const proximoSufixo = romanos[duplicatasExistentes.length] || (duplicatasExistentes.length + 1);
+    // 1a ocorrencia do dia (a original) => "II"; 2a => "III"; ...
+    const proximoSufixo = romanos[ocorrenciasHoje.length] || (ocorrenciasHoje.length + 1);
     const tituloNovo = `${tituloBase} ${proximoSufixo}`;
 
     const novaMissaoDuplicada = {
@@ -519,7 +534,7 @@ async function duplicarMissaoPorTitulo(tituloOriginal) {
     renderizarVisaoAtual();
     mostrarNotificacao("Sucesso", `Missão repetida: ${tituloNovo}`, "sucesso", 2000);
 
-    sincronizarComServidorEmSegundoPlano('adicionarMissao', novaMissaoDuplicada).then(resposta => {
+    sincronizarComServidorEmSegundoPlano('adicionarMissao', { ...novaMissaoDuplicada, repeticao: true }).then(resposta => {
         if (resposta && resposta.status === 'success' && resposta.id) {
             novaMissaoDuplicada.id = resposta.id;
             salvarDadosLocalStorage();
