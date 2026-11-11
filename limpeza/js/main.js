@@ -214,7 +214,7 @@ async function carregarLinhasPainel() {
 
     painelLinhas.carregando = true;
     try {
-        const resp = await fetch(API_URL + '?painel=linhas', { method: 'GET', redirect: 'follow' });
+        const resp = await chamarAPI(API_URL + '?painel=linhas', { method: 'GET', redirect: 'follow' });
         const json = await resp.json();
 
         if (!json || json.status !== 'success') {
@@ -379,9 +379,8 @@ async function excluirLinhasSelecionadas() {
     });
 
     try {
-        const resp = await fetch(API_URL, {
+        const resp = await chamarAPI(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ acao: 'excluirLinhas', itens: itens })
         });
         const json = await resp.json();
@@ -398,6 +397,119 @@ async function excluirLinhasSelecionadas() {
         console.error('Erro ao excluir linhas:', err);
         mostrarNotificacao("Erro", "Falha de conexão ao excluir.", "erro", 3000);
     }
+}
+
+// =====================================================================
+// CHAVE DE ACESSO DA API
+// A API recusa qualquer pedido sem o header X-Api-Key.
+// A chave e digitada uma vez pelo usuario e guardada no navegador.
+// =====================================================================
+const CHAVE_STORAGE = 'cq_api_key';
+
+function obterChaveAPI() {
+    return localStorage.getItem(CHAVE_STORAGE) || '';
+}
+
+function salvarChaveAPI(chave) {
+    localStorage.setItem(CHAVE_STORAGE, String(chave || '').trim());
+}
+
+function cabecalhosAPI(comJson = true) {
+    const h = { 'X-Api-Key': obterChaveAPI() };
+    if (comJson) h['Content-Type'] = 'application/json';
+    return h;
+}
+
+// Chama a API. Se voltar 401, abre o modal da chave e lanca um erro
+// tratado, para o chamador simplesmente parar sem quebrar a tela.
+async function chamarAPI(url, opcoes = {}) {
+    const opcoesFinais = {
+        ...opcoes,
+        headers: { ...cabecalhosAPI(opcoes.body !== undefined), ...(opcoes.headers || {}) }
+    };
+
+    const resp = await fetch(url, opcoesFinais);
+
+    if (resp.status === 401) {
+        abrirModalChave('Chave de acesso inválida. Digite novamente.');
+        throw new Error('NAO_AUTORIZADO');
+    }
+
+    return resp;
+}
+
+// ---- Modal da chave ----
+function abrirModalChave(mensagem) {
+    let modal = document.getElementById('modalChaveAcesso');
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modalChaveAcesso';
+        modal.className = 'fixed inset-0 w-screen h-screen bg-[#090614]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4';
+        modal.innerHTML = `
+            <div class="bg-[#17112d] border border-purple-800/80 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+                <div class="border-b border-purple-900/50 pb-3">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">
+                        <i class="fa-solid fa-lock text-purple-400 mr-2"></i>Chave de Acesso
+                    </h3>
+                </div>
+                <p id="chaveMensagem" class="text-xs text-purple-300/70"></p>
+                <input type="password" id="inputChaveAcesso" placeholder="Cole a chave aqui"
+                       class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-sm text-white placeholder-purple-400/40 focus:outline-none focus:border-purple-500"
+                       onkeydown="if(event.key==='Enter') confirmarChaveAcesso()">
+                <p id="erroChave" class="text-[11px] text-red-400 hidden"></p>
+                <button onclick="confirmarChaveAcesso()" class="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl text-xs font-mono-code font-bold transition">
+                    Entrar
+                </button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const msg = modal.querySelector('#chaveMensagem');
+    if (msg) msg.textContent = mensagem || 'Digite a chave de acesso para usar o sistema.';
+
+    const erro = modal.querySelector('#erroChave');
+    if (erro) erro.classList.add('hidden');
+
+    const input = modal.querySelector('#inputChaveAcesso');
+    if (input) {
+        input.value = obterChaveAPI();
+        setTimeout(() => input.focus(), 50);
+    }
+
+    modal.classList.remove('hidden');
+}
+
+async function confirmarChaveAcesso() {
+    const modal = document.getElementById('modalChaveAcesso');
+    const input = document.getElementById('inputChaveAcesso');
+    const erro = document.getElementById('erroChave');
+    if (!modal || !input) return;
+
+    const chave = input.value.trim();
+    if (!chave) {
+        if (erro) { erro.textContent = 'Digite a chave.'; erro.classList.remove('hidden'); }
+        return;
+    }
+
+    salvarChaveAPI(chave);
+
+    // Testa a chave com um pedido leve
+    try {
+        const resp = await fetch(API_URL, { method: 'GET', headers: cabecalhosAPI(false), redirect: 'follow' });
+        if (resp.status === 401) {
+            if (erro) { erro.textContent = 'Chave incorreta. Tente de novo.'; erro.classList.remove('hidden'); }
+            return;
+        }
+    } catch (e) {
+        if (erro) { erro.textContent = 'Sem conexão. Tente de novo.'; erro.classList.remove('hidden'); }
+        return;
+    }
+
+    modal.classList.add('hidden');
+    mostrarNotificacao("Sucesso", "Acesso liberado.", "sucesso", 2000);
+    carregarDadosDoServidor(true);
 }
 
 async function carregarDadosDoServidor(forcarVerificacao = true) {
@@ -484,9 +596,8 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
 
 async function sincronizarComServidorEmSegundoPlano(acao, payload) {
     try {
-        const response = await fetch(API_URL, {
+        const response = await chamarAPI(API_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ acao, ...payload })
         });
         const resJson = await response.json();
@@ -1495,9 +1606,8 @@ async function salvarTodasFrequencias() {
 
     try {
         const resultados = await Promise.all(alteracoes.map(a =>
-            fetch(API_URL, {
+            chamarAPI(API_URL, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ acao: 'editarFrequencia', titulo: a.titulo, frequenciaDias: a.frequenciaDias })
             }).then(r => r.json()).catch(() => ({ status: 'error' }))
         ));
