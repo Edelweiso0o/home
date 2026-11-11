@@ -39,41 +39,26 @@ function columnToLetter(column) {
   return letter;
 }
 
+// Regra fixa da planilha: a linha 1 e sempre vazia e o cabecalho fica na linha 2.
+// O mapeamento de colunas usa o proprio texto do cabecalho, sem lista fixa de nomes,
+// entao renomear ou criar colunas nao quebra o codigo.
+const LINHA_CABECALHO = 1; // indice 0-based da linha 2
+
 function parseSheetRows(rows) {
-  if (!rows || rows.length === 0) return { headerRowIndex: -1, colMap: {}, dataRows: [] };
+  if (!rows || rows.length === 0) {
+    return { headerRowIndex: LINHA_CABECALHO, colMap: {}, dataRows: [] };
+  }
 
-  let headerRowIndex = -1;
-  let colMap = {};
-
-  for (let i = 0; i < Math.min(rows.length, 5); i++) {
-    const row = rows[i];
-    let matches = 0;
-    let tempMap = {};
-    row.forEach((cell, idx) => {
-      if (cell) {
-        const val = String(cell).trim();
-        tempMap[val] = idx;
-        if (['ID', 'Data', 'Título da Missão', 'Status', 'ID Turno', 'Hora Entrada', 'Hora Saída', 'Hora de Início', 'Hora de Término', 'Tempo Trabalhado', 'Créditos', 'Crédito', 'Tempo Est. (min)', 'Tempo Estimado (Minutos)', 'Tempo Médio (Minutos)', 'Frequência (Dias)', 'Prioridade', 'Status do Turno'].includes(val)) {
-          matches++;
-        }
-      }
-    });
-    if (matches >= 2) {
-      headerRowIndex = i;
-      colMap = tempMap;
-      break;
+  const colMap = {};
+  const cabecalho = rows[LINHA_CABECALHO] || [];
+  cabecalho.forEach((cell, idx) => {
+    if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+      colMap[String(cell).trim()] = idx;
     }
-  }
+  });
 
-  if (headerRowIndex === -1 && rows.length >= 2) {
-    headerRowIndex = 0;
-    rows[0].forEach((h, idx) => {
-      if (h) colMap[h.trim()] = idx;
-    });
-  }
-
-  const dataRows = headerRowIndex !== -1 ? rows.slice(headerRowIndex + 1) : [];
-  return { headerRowIndex, colMap, dataRows };
+  const dataRows = rows.slice(LINHA_CABECALHO + 1);
+  return { headerRowIndex: LINHA_CABECALHO, colMap, dataRows };
 }
 
 function normalizarStatusMissao(valor) {
