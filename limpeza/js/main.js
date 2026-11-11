@@ -1749,8 +1749,7 @@ async function salvarTodasFrequencias() {
 let somFolgaLigado = false;
 let audioCtxFolga = null;
 let particulasRodando = false;
-let somFolgaNodes = null;
-let somFolgaTimer = null;
+let somPraia = null;
 
 function atualizarPainelFolga() {
     const c = cicloFolgaAtual;
@@ -1876,6 +1875,57 @@ function pararParticulasFolga() {
 // Som relaxante gerado na hora (sem arquivo). Acorde suave com fade-in/out.
 // Som ambiente de folga: pad continuo gerado por Web Audio (sem arquivo).
 // Um acorde suave que respira, com osciladores em loop.
+// ===== SOM DE PRAIA (gerado por codigo, sem arquivo) =====
+// Tres camadas: ondas do mar (ruido filtrado), vento suave, e um
+// carrilhao de "ukulele" em notas soltas. Tudo em loop continuo.
+
+function criarRuido(ctx, segundos) {
+    const n = ctx.sampleRate * segundos;
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const dados = buf.getChannelData(0);
+    let ultimo = 0;
+    for (let i = 0; i < n; i++) {
+        const branco = Math.random() * 2 - 1;
+        // filtro passa-baixa simples: deixa o ruido "grosso", tipo agua
+        ultimo = (ultimo * 0.94) + (branco * 0.06);
+        dados[i] = ultimo * 3.2;
+    }
+    return buf;
+}
+
+// Uma nota dedilhada, tipo ukulele: ataque rapido, cauda curta, harmonico suave
+function dedilhar(ctx, destino, freq, quando, volume) {
+    const osc = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filtro = ctx.createBiquadFilter();
+
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 2;          // harmonico, da brilho
+
+    filtro.type = 'lowpass';
+    filtro.frequency.setValueAtTime(2600, quando);
+    filtro.frequency.exponentialRampToValueAtTime(700, quando + 0.6);
+
+    gain.gain.setValueAtTime(0.0001, quando);
+    gain.gain.exponentialRampToValueAtTime(volume, quando + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, quando + 1.1);
+
+    const gain2 = ctx.createGain();
+    gain2.gain.value = 0.28;
+
+    osc.connect(gain);
+    osc2.connect(gain2);
+    gain2.connect(gain);
+    gain.connect(filtro);
+    filtro.connect(destino);
+
+    osc.start(quando); osc.stop(quando + 1.2);
+    osc2.start(quando); osc2.stop(quando + 1.2);
+}
+
 function iniciarSomFolga() {
     try {
         const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -1883,42 +1933,85 @@ function iniciarSomFolga() {
         if (!audioCtxFolga) audioCtxFolga = new Ctx();
         const ctx = audioCtxFolga;
         if (ctx.state === 'suspended') ctx.resume();
-        if (somFolgaNodes) return;
+        if (somPraia) return;
 
+        const agora = ctx.currentTime;
+
+        // ---- barramento geral ----
         const master = ctx.createGain();
-        master.gain.setValueAtTime(0.0001, ctx.currentTime);
-        master.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + 2.5);
+        master.gain.setValueAtTime(0.0001, agora);
+        master.gain.exponentialRampToValueAtTime(0.55, agora + 3);
         master.connect(ctx.destination);
 
-        // C9: Dó, Mi, Sol, Ré (uma oitava acima) - acorde aberto e relaxante
-        const notas = [130.81, 196.00, 261.63, 293.66, 392.00];
-        const oscs = [];
+        // ---- 1) ondas do mar ----
+        const mar = ctx.createBufferSource();
+        mar.buffer = criarRuido(ctx, 8);
+        mar.loop = true;
 
-        notas.forEach((freq, i) => {
-            const osc = ctx.createOscillator();
-            const g = ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = freq;
-            osc.detune.value = (Math.random() - 0.5) * 8;
-            g.gain.value = 0.3 / (i + 1);
+        const filtroMar = ctx.createBiquadFilter();
+        filtroMar.type = 'lowpass';
+        filtroMar.frequency.value = 520;
+        filtroMar.Q.value = 0.6;
 
-            // LFO lento faz o volume respirar
-            const lfo = ctx.createOscillator();
-            const lfoGain = ctx.createGain();
-            lfo.frequency.value = 0.05 + Math.random() * 0.09;
-            lfoGain.gain.value = 0.12 / (i + 1);
-            lfo.connect(lfoGain);
-            lfoGain.connect(g.gain);
-            lfo.start();
+        const gainMar = ctx.createGain();
+        gainMar.gain.value = 0.14;
 
-            osc.connect(g);
-            g.connect(master);
-            osc.start();
+        // LFO lento = a mare indo e voltando
+        const lfoMar = ctx.createOscillator();
+        const lfoMarGain = ctx.createGain();
+        lfoMar.frequency.value = 0.075;
+        lfoMarGain.gain.value = 0.09;
+        lfoMar.connect(lfoMarGain);
+        lfoMarGain.connect(gainMar.gain);
+        lfoMar.start();
 
-            oscs.push(osc, lfo);
-        });
+        mar.connect(filtroMar);
+        filtroMar.connect(gainMar);
+        gainMar.connect(master);
+        mar.start();
 
-        somFolgaNodes = { master, oscs };
+        // ---- 2) vento (ruido mais agudo e bem baixo) ----
+        const vento = ctx.createBufferSource();
+        vento.buffer = criarRuido(ctx, 6);
+        vento.loop = true;
+
+        const filtroVento = ctx.createBiquadFilter();
+        filtroVento.type = 'bandpass';
+        filtroVento.frequency.value = 1400;
+        filtroVento.Q.value = 0.8;
+
+        const gainVento = ctx.createGain();
+        gainVento.gain.value = 0.028;
+
+        const lfoVento = ctx.createOscillator();
+        const lfoVentoGain = ctx.createGain();
+        lfoVento.frequency.value = 0.045;
+        lfoVentoGain.gain.value = 0.02;
+        lfoVento.connect(lfoVentoGain);
+        lfoVentoGain.connect(gainVento.gain);
+        lfoVento.start();
+
+        vento.connect(filtroVento);
+        filtroVento.connect(gainVento);
+        gainVento.connect(master);
+        vento.start();
+
+        // ---- 3) carrilhao de ukulele ----
+        // Acorde de Dó maior (C E G) + Sol maior esparso, notas soltas
+        const escala = [261.63, 329.63, 392.00, 523.25, 587.33, 659.25];
+        const agendaNotas = () => {
+            if (!somPraia) return;
+            const t = audioCtxFolga.currentTime;
+            const quantas = 1 + Math.floor(Math.random() * 2);
+            for (let n = 0; n < quantas; n++) {
+                const freq = escala[Math.floor(Math.random() * escala.length)];
+                dedilhar(audioCtxFolga, master, freq, t + n * (0.18 + Math.random() * 0.22), 0.055);
+            }
+        };
+        agendaNotas();
+        const timerNotas = setInterval(agendaNotas, 1700 + Math.random() * 900);
+
+        somPraia = { master, mar, vento, lfoMar, lfoVento, timerNotas };
     } catch (e) {
         console.error('[iniciarSomFolga]', e);
     }
@@ -1926,18 +2019,19 @@ function iniciarSomFolga() {
 
 function pararSomFolga() {
     try {
-        if (!somFolgaNodes || !audioCtxFolga) return;
-        const { master, oscs } = somFolgaNodes;
+        if (!somPraia || !audioCtxFolga) return;
+        const { master, mar, vento, lfoMar, lfoVento, timerNotas } = somPraia;
         const agora = audioCtxFolga.currentTime;
         master.gain.cancelScheduledValues(agora);
         master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), agora);
-        master.gain.exponentialRampToValueAtTime(0.0001, agora + 1.2);
-        const paraParar = oscs;
+        master.gain.exponentialRampToValueAtTime(0.0001, agora + 1.5);
+        clearInterval(timerNotas);
+        const parar = [mar, vento, lfoMar, lfoVento];
         setTimeout(() => {
-            paraParar.forEach(o => { try { o.stop(); } catch (e) {} });
+            parar.forEach(o => { try { o.stop(); } catch (e) {} });
             try { master.disconnect(); } catch (e) {}
-        }, 1400);
-        somFolgaNodes = null;
+        }, 1800);
+        somPraia = null;
     } catch (e) {
         console.error('[pararSomFolga]', e);
     }
