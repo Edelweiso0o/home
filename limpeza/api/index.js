@@ -282,10 +282,134 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   }
 }
 
+// ===== CICLO DE FOLGA =====
+// A configuracao mora na aba "Configuracoes" (linha 2 = cabecalho, coluna B = chave, C = valor).
+// A contagem de dias trabalhados vem do "Registro de Ponto": 1 turno por dia conta 1 dia.
+const ABA_CONFIG = "Configurações";
+const CONFIG_PADRAO = { diasParaFolga: 9 };
+
+async function lerConfiguracoes(sheets, spreadsheetId) {
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${ABA_CONFIG}!A:D` });
+    const rows = res.data.values || [];
+    const cfg = { ...CONFIG_PADRAO };
+    for (let i = 2; i < rows.length; i++) {          // linha 1 vazia, linha 2 = cabecalho
+      const chave = String((rows[i] && rows[i][1]) || "").trim();
+      const valor = rows[i] && rows[i][2];
+      if (!chave || valor === undefined || valor === "") continue;
+      cfg[chave] = valor;
+    }
+    cfg.diasParaFolga = parseInt(cfg.diasParaFolga, 10) || CONFIG_PADRAO.diasParaFolga;
+    if (cfg.diasParaFolga < 1) cfg.diasParaFolga = CONFIG_PADRAO.diasParaFolga;
+    return cfg;
+  } catch (e) {
+    console.error("[lerConfiguracoes] ERRO:", e && e.message);
+    return { ...CONFIG_PADRAO };
+  }
+}
+
+async function salvarConfiguracoes(sheets, spreadsheetId, patch) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${ABA_CONFIG}!A:D` });
+  const rows = res.data.values || [];
+  const chaves = {};
+  for (let i = 2; i < rows.length; i++) {
+    const chave = String((rows[i] && rows[i][1]) || "").trim();
+    if (chave) chaves[chave] = i + 1;               // numero da linha na planilha
+  }
+
+  const atualizacoes = [];
+  const novasLinhas = [];
+
+  Object.keys(patch).forEach(chave => {
+    const valor = patch[chave];
+    if (chaves[chave]) {
+      atualizacoes.push({ range: `${ABA_CONFIG}!C${chaves[chave]}`, values: [[valor]] });
+    } else {
+      novasLinhas.push([chave, valor]);
+    }
+  });
+
+  if (atualizacoes.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: { valueInputOption: 'USER_ENTERED', data: atualizacoes }
+    });
+  }
+
+  if (novasLinhas.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${ABA_CONFIG}!B${rows.length + 1}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: novasLinhas }
+    });
+  }
+
+  return await lerConfiguracoes(sheets, spreadsheetId);
+}
+
+// Conta quantos dias distintos tiveram turno desde a data de referencia.
+// referenciaVazia = conta todos os dias com turno na planilha.
+function contarDiasTrabalhados(turnos, referenciaStr) {
+  const refMs = referenciaStr ? parseDataPtBrParaMs(referenciaStr) : 0;
+  const dias = new Set();
+  (turnos || []).forEach(t => {
+    const dataNorm = normalizarData(t.data);
+    if (!dataNorm) return;
+    const ms = parseDataPtBrParaMs(dataNorm);
+    if (!ms) return;
+    if (refMs && ms <= refMs) return;
+    dias.add(dataNorm);
+  });
+  return dias.size;
+}
+
+// Devolve o estado do ciclo de folga para hoje.
+// Usa "ultimaFolga" (data) como marco zero; sem ela, conta todos os dias trabalhados.
+function calcularCicloFolga(cfg, turnos, hojeStr) {
+  const diasParaFolga = parseInt(cfg.diasParaFolga, 10) || CONFIG_PADRAO.diasParaFolga;
+  const ultimaFolga = cfg.ultimaFolga ? normalizarData(cfg.ultimaFolga) : "";
+
+  const trabalhouHoje = (turnos || []).some(t => normalizarData(t.data) === hojeStr);
+  const diasTrabalhados = contarDiasTrabalhados(turnos, ultimaFolga);
+
+  // "pularFolgaAte": se voce decidiu trabalhar no dia de folga, a folga
+  // e empurrada para depois dessa data.
+  const pularAte = cfg.pularFolgaAte ? normalizarData(cfg.pularFolgaAte) : "";
+  const hojeMs = parseDataPtBrParaMs(hojeStr);
+  const puladaHoje = pularAte && parseDataPtBrParaMs(pularAte) >= hojeMs;
+
+  const ehFolgaHoje = !puladaHoje && diasTrabalhados >= diasParaFolga && !trabalhouHoje;
+  const faltam = Math.max(0, diasParaFolga - diasTrabalhados);
+
+  return {
+    diasParaFolga: diasParaFolga,
+    diasTrabalhados: diasTrabalhados,
+    faltam: faltam,
+    ehFolgaHoje: ehFolgaHoje,
+    trabalhouHoje: trabalhouHoje,
+    ultimaFolga: ultimaFolga,
+    pularFolgaAte: pularAte
+  };
+}
+
 async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   try {
     const hojeStr = getDataHojeStr();
     const hojeMs = parseDataPtBrParaMs(hojeStr);
+
+    // Dia de folga: nao lanca missao nenhuma.
+    try {
+      const cfg = await lerConfiguracoes(sheets, spreadsheetId);
+      const turnosParaCiclo = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+      const ciclo = calcularCicloFolga(cfg, turnosParaCiclo, hojeStr);
+      if (ciclo.ehFolgaHoje) {
+        console.log("[sincronizar] Hoje e dia de folga - nenhuma missao sera lancada.");
+        return;
+      }
+    } catch (eCiclo) {
+      console.error("[sincronizar] falha ao avaliar folga (segue normal):", eCiclo && eCiclo.message);
+    }
     
     const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
     const mParsed = parseSheetRows(missoesRes.data.values || []);
@@ -507,12 +631,21 @@ export default async function handler(req, res) {
 
       const concluidasCount = progresso.filter(p => p.status === "Concluído").length;
 
+      let cicloFolga = null;
+      try {
+        const cfg = await lerConfiguracoes(sheets, spreadsheetId);
+        cicloFolga = calcularCicloFolga(cfg, turnos, hojeStr);
+      } catch (eCiclo) {
+        console.error("[GET] falha ao calcular ciclo de folga:", eCiclo && eCiclo.message);
+      }
+
       return res.status(200).json({
         status: "success",
         missoes: progresso.length > 0 ? progresso : missoes,
         turnos: turnos,
         pontoAtivo: pontoAtivo,
         horaEntradaMs: horaEntradaMs,
+        cicloFolga: cicloFolga,
         estatisticas: { concluidas: concluidasCount }
       });
     }
@@ -521,6 +654,41 @@ export default async function handler(req, res) {
       const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const acao = data.acao;
       const hojeStr = getDataHojeStr();
+
+      if (acao === 'salvarConfigFolga') {
+        const novoValor = parseInt(data.diasParaFolga, 10);
+        if (!Number.isFinite(novoValor) || novoValor < 1 || novoValor > 365) {
+          return res.status(400).json({ status: "error", message: "diasParaFolga deve ser um numero entre 1 e 365." });
+        }
+        const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { diasParaFolga: novoValor });
+        const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        return res.status(200).json({
+          status: "success",
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+        });
+      }
+
+      if (acao === 'resetarCicloFolga') {
+        // Zera a contagem: a partir de hoje comeca um ciclo novo.
+        const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { ultimaFolga: hojeStr, pularFolgaAte: "" });
+        const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        return res.status(200).json({
+          status: "success",
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+        });
+      }
+
+      if (acao === 'trabalharNaFolga') {
+        // Decide trabalhar no dia de folga: empurra a folga para amanha.
+        const amanha = new Date(parseDataPtBrParaMs(hojeStr) + 86400000);
+        const amanhaStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(amanha);
+        const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { pularFolgaAte: amanhaStr });
+        const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        return res.status(200).json({
+          status: "success",
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+        });
+      }
 
       if (acao === 'baterPonto') {
         const resPonto = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Registro de Ponto!A:Z" });
