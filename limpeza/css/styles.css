@@ -100,3 +100,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     75%  { opacity: 0.55; }
     100% { transform: translateY(-90px) scale(1.1) rotate(28deg); opacity: 0; }
 }
+
+/* Particulas de fundo: sobem a tela inteira */
+#fundoFolga .particula-folga {
+    bottom: -40px;
+    animation-name: subirParticulaFundo;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    filter: blur(0.3px);
+}
+@keyframes subirParticulaFundo {
+    0%   { transform: translateY(0) scale(0.6) rotate(0deg); opacity: 0; }
+    10%  { opacity: 0.55; }
+    80%  { opacity: 0.35; }
+    100% { transform: translateY(var(--subida, -100vh)) scale(1.2) rotate(40deg); opacity: 0; }
+}
+
+/* Garante que o conteudo fique acima do fundo animado */
+body > header, body > main { position: relative; z-index: 1; }
