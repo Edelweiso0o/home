@@ -379,13 +379,18 @@ function calcularCicloFolga(cfg, turnos, hojeStr) {
   const hojeMs = parseDataPtBrParaMs(hojeStr);
   const puladaHoje = pularAte && parseDataPtBrParaMs(pularAte) >= hojeMs;
 
-  const ehFolgaHoje = !puladaHoje && diasTrabalhados >= diasParaFolga && !trabalhouHoje;
+  // A folga e o dia SEGUINTE ao fechamento do ciclo.
+  // Se voce bateu ponto hoje, o ciclo ja avancou hoje: hoje nao e folga.
+  // Sem turno hoje e com o ciclo cheio, hoje e o dia de folga.
+  const cicloCheio = diasTrabalhados >= diasParaFolga;
+  const ehFolgaHoje = !puladaHoje && cicloCheio && !trabalhouHoje;
   const faltam = Math.max(0, diasParaFolga - diasTrabalhados);
 
   return {
     diasParaFolga: diasParaFolga,
     diasTrabalhados: diasTrabalhados,
     faltam: faltam,
+    cicloCheio: cicloCheio,
     ehFolgaHoje: ehFolgaHoje,
     trabalhouHoje: trabalhouHoje,
     ultimaFolga: ultimaFolga,
