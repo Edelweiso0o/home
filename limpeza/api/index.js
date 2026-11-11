@@ -382,7 +382,9 @@ function calcularCicloFolga(cfg, turnos, hojeStr) {
   // A folga e o dia SEGUINTE ao fechamento do ciclo.
   // Se voce bateu ponto hoje, o ciclo ja avancou hoje: hoje nao e folga.
   // Sem turno hoje e com o ciclo cheio, hoje e o dia de folga.
-  const modoTeste = String(cfg.modoTeste || '').toUpperCase() === 'TRUE';
+  const valorTeste = cfg.modoTeste;
+  const modoTeste = valorTeste === true
+    || String(valorTeste || '').toUpperCase() === 'TRUE';
   const cicloCheio = diasTrabalhados >= diasParaFolga;
   const ehFolgaHoje = modoTeste || (!puladaHoje && cicloCheio && !trabalhouHoje);
   const faltam = Math.max(0, diasParaFolga - diasTrabalhados);
@@ -711,7 +713,8 @@ export default async function handler(req, res) {
         // Bater ponto encerra o modo teste: se voce decidiu trabalhar, o teste acabou.
         try {
           const cfgAntes = await lerConfiguracoes(sheets, spreadsheetId);
-          if (String(cfgAntes.modoTeste || '').toUpperCase() === 'TRUE') {
+          const vt = cfgAntes.modoTeste;
+          if (vt === true || String(vt || '').toUpperCase() === 'TRUE') {
             await salvarConfiguracoes(sheets, spreadsheetId, { modoTeste: 'FALSE' });
           }
         } catch (eT) {
