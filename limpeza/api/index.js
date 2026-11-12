@@ -186,6 +186,10 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
   });
 }
 
+// Cor das linhas internas da tabela (cinza claro). Serve tanto nas celulas de fundo
+// escuro quanto no corpo: nao briga com nenhuma das duas areas.
+const COR_BORDA_INTERNA = { red: 0.72, green: 0.75, blue: 0.82 };
+
 async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -262,17 +266,21 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       requests.push({
         updateBorders: {
           range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
-          innerHorizontal: { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } },
-          innerVertical:   { style: "SOLID", color: { red: 1, green: 0.5, blue: 0 } }
+          innerHorizontal: { style: "SOLID", color: COR_BORDA_INTERNA },
+          innerVertical:   { style: "SOLID", color: COR_BORDA_INTERNA }
         }
       });
     }
 
+    // A linha de cabecalho tem fundo escuro (#2d3444). Qualquer borda escura desenhada
+    // POR CIMA dela desaparece no fundo e le como preto chapado. Por isso as linhas
+    // internas e a linha abaixo do cabecalho usam a cor clara (mesma das bordas internas
+    // do corpo), e nao preto.
     requests.push({
       updateBorders: {
         range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
-        bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        innerVertical: { style: "SOLID", color: { red: 0, green: 0, blue: 0 } }
+        bottom: { style: "SOLID_MEDIUM", color: COR_BORDA_INTERNA },
+        innerVertical: { style: "SOLID", color: COR_BORDA_INTERNA }
       }
     });
 
