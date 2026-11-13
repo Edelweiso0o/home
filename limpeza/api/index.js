@@ -188,7 +188,15 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
 
 // Cor das linhas internas da tabela (cinza claro). Serve tanto nas celulas de fundo
 // escuro quanto no corpo: nao briga com nenhuma das duas areas.
-const COR_BORDA_INTERNA = { red: 0.72, green: 0.75, blue: 0.82 };
+// Paleta de bordas (regra do dono da planilha):
+//   externa  -> MEDIA, preta
+//   interna  -> FINA, laranja
+//   cabecalho -> FINA, preta (interna e embaixo)
+const COR_PRETA   = { red: 0, green: 0, blue: 0 };
+const COR_LARANJA = { red: 1, green: 0.42, blue: 0 };
+const BORDA_EXTERNA = { style: "SOLID_MEDIUM", color: COR_PRETA };
+const BORDA_INTERNA = { style: "SOLID", color: COR_LARANJA };
+const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 
 async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
@@ -252,35 +260,35 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
+    // 1) Borda externa da tabela inteira: MEDIA, preta
     requests.push({
       updateBorders: {
         range: { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex },
-        top:    { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        bottom: { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        left:   { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } },
-        right:  { style: "SOLID_MEDIUM", color: { red: 0, green: 0, blue: 0 } }
+        top:    BORDA_EXTERNA,
+        bottom: BORDA_EXTERNA,
+        left:   BORDA_EXTERNA,
+        right:  BORDA_EXTERNA
       }
     });
 
+    // 2) Bordas internas do corpo: FINA, laranja
     if (endRowIndex > startRowIndex + 1) {
       requests.push({
         updateBorders: {
           range: { sheetId, startRowIndex: startRowIndex + 1, endRowIndex, startColumnIndex, endColumnIndex },
-          innerHorizontal: { style: "SOLID", color: COR_BORDA_INTERNA },
-          innerVertical:   { style: "SOLID", color: COR_BORDA_INTERNA }
+          innerHorizontal: BORDA_INTERNA,
+          innerVertical:   BORDA_INTERNA
         }
       });
     }
 
-    // A linha de cabecalho tem fundo escuro (#2d3444). Qualquer borda escura desenhada
-    // POR CIMA dela desaparece no fundo e le como preto chapado. Por isso as linhas
-    // internas e a linha abaixo do cabecalho usam a cor clara (mesma das bordas internas
-    // do corpo), e nao preto.
+    // 3) Cabecalho: FINA, preta (interna e embaixo).
+    // Vem por ULTIMO para sobrescrever o laranja do passo 2 na faixa do cabecalho.
     requests.push({
       updateBorders: {
         range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
-        bottom: { style: "SOLID_MEDIUM", color: COR_BORDA_INTERNA },
-        innerVertical: { style: "SOLID", color: COR_BORDA_INTERNA }
+        bottom: BORDA_CABECALHO,
+        innerVertical: BORDA_CABECALHO
       }
     });
 
@@ -618,8 +626,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ status: "success", abas: resultado });
       }
 
-      await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
-
+      // As missoes do dia SO entram na planilha quando o usuario bate o ponto de ENTRADA.
+      // Abrir o site nao lanca nada: primeiro le o ponto, depois decide.
       const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
       const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
       const missoes = await getSheetData(sheets, spreadsheetId, "Missões!A:Z");
@@ -644,6 +652,12 @@ export default async function handler(req, res) {
             break;
           }
         }
+      }
+
+      // Lanca as missoes do dia somente com turno aberto (ponto batido e nao encerrado).
+      // Sem turno aberto nao mexe na aba Progresso Diario.
+      if (pontoAtivo) {
+        await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
       }
 
       const concluidasCount = progresso.filter(p => p.status === "Concluído").length;
@@ -759,6 +773,13 @@ export default async function handler(req, res) {
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [rowArray] }
           });
+
+          // Ponto batido: agora sim entram as missoes do dia.
+          try {
+            await sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId);
+          } catch (eSinc) {
+            console.error("[baterPonto ENTRADA] falha ao lancar missoes:", eSinc && eSinc.message);
+          }
         } else if (data.status === 'SAIDA') {
           const dadosPonto = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
           let linhaTurno = -1;
