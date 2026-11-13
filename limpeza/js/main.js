@@ -1733,7 +1733,9 @@ async function salvarTodasFrequencias() {
         } else {
             mostrarNotificacao("Atenção", `${falhas} de ${alteracoes.length} não foram salvas no servidor.`, "aviso", 4000);
         }
-        carregarDadosDoServidor(false);
+        // carregarDadosDoServidor ja substitui "missoes" pelo que esta na planilha
+        // e chama renderizarVisaoAtual(). Basta esperar, para a lista refletir a nova frequencia.
+        await carregarDadosDoServidor(false);
     } catch (erro) {
         console.error("Erro ao salvar frequências:", erro);
         mostrarNotificacao("Erro", "Não foi possível salvar as frequências.", "aviso", 4000);
