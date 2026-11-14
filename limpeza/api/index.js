@@ -380,28 +380,67 @@ async function salvarConfiguracoes(sheets, spreadsheetId, patch) {
 
 // Conta quantos dias distintos tiveram turno desde a data de referencia.
 // referenciaVazia = conta todos os dias com turno na planilha.
-function contarDiasTrabalhados(turnos, referenciaStr) {
+// Um dia so conta para o ciclo de folga se for RIGOROSO:
+//   1) teve turno no Registro de Ponto
+//   2) TODAS as missoes lancadas naquele dia foram CONCLUIDAS
+//      ("Cancelado" nao conta como concluido; "Pendente"/"Em Andamento" reprovam o dia)
+//   3) a contagem e em SEQUENCIA: no primeiro dia invalido a contagem para e
+//      vale o que foi acumulado antes dele. Um buraco depois nao apaga o passado,
+//      mas os dias apos o buraco nao somam.
+function contarDiasTrabalhados(turnos, referenciaStr, progresso) {
   const refMs = referenciaStr ? parseDataPtBrParaMs(referenciaStr) : 0;
-  const dias = new Set();
+
+  // dias com turno (apos a ultima folga)
+  const diasComTurno = new Map(); // "13/11/2026" -> ms
   (turnos || []).forEach(t => {
     const dataNorm = normalizarData(t.data);
     if (!dataNorm) return;
     const ms = parseDataPtBrParaMs(dataNorm);
     if (!ms) return;
     if (refMs && ms <= refMs) return;
-    dias.add(dataNorm);
+    diasComTurno.set(dataNorm, ms);
   });
-  return dias.size;
+  if (diasComTurno.size === 0) return 0;
+
+  // status das missoes por dia
+  const missoesPorDia = new Map(); // data -> { total, concluidas }
+  (progresso || []).forEach(pRow => {
+    const dataNorm = normalizarData(pRow.data);
+    if (!dataNorm) return;
+    const ms = parseDataPtBrParaMs(dataNorm);
+    if (!ms) return;
+    if (refMs && ms <= refMs) return;
+    if (!diasComTurno.has(dataNorm)) return;
+    const st = normalizarStatusMissao(pRow.status);
+    const reg = missoesPorDia.get(dataNorm) || { total: 0, concluidas: 0 };
+    reg.total += 1;
+    if (st === 'Concluído') reg.concluidas += 1;
+    missoesPorDia.set(dataNorm, reg);
+  });
+
+  // ordena os dias com turno do mais antigo para o mais recente
+  const ordenados = Array.from(diasComTurno.entries())
+    .sort((a, b) => a[1] - b[1]);
+
+  // conta em sequencia até o primeiro dia que reprova
+  let validos = 0;
+  for (const [dataStr] of ordenados) {
+    const reg = missoesPorDia.get(dataStr);
+    const diaValido = !!reg && reg.total > 0 && reg.concluidas === reg.total;
+    if (!diaValido) break;
+    validos += 1;
+  }
+  return validos;
 }
 
 // Devolve o estado do ciclo de folga para hoje.
 // Usa "ultimaFolga" (data) como marco zero; sem ela, conta todos os dias trabalhados.
-function calcularCicloFolga(cfg, turnos, hojeStr) {
+function calcularCicloFolga(cfg, turnos, hojeStr, progresso) {
   const diasParaFolga = parseInt(cfg.diasParaFolga, 10) || CONFIG_PADRAO.diasParaFolga;
   const ultimaFolga = cfg.ultimaFolga ? normalizarData(cfg.ultimaFolga) : "";
 
   const trabalhouHoje = (turnos || []).some(t => normalizarData(t.data) === hojeStr);
-  const diasTrabalhados = contarDiasTrabalhados(turnos, ultimaFolga);
+  const diasTrabalhados = contarDiasTrabalhados(turnos, ultimaFolga, progresso);
 
   // "pularFolgaAte": se voce decidiu trabalhar no dia de folga, a folga
   // e empurrada para depois dessa data.
@@ -441,7 +480,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     try {
       const cfg = await lerConfiguracoes(sheets, spreadsheetId);
       const turnosParaCiclo = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
-      const ciclo = calcularCicloFolga(cfg, turnosParaCiclo, hojeStr);
+      const progressoParaCiclo = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
+      const ciclo = calcularCicloFolga(cfg, turnosParaCiclo, hojeStr, progressoParaCiclo);
       if (ciclo.ehFolgaHoje) {
         console.log("[sincronizar] Hoje e dia de folga - nenhuma missao sera lancada.");
         return;
@@ -663,7 +703,7 @@ export default async function handler(req, res) {
       let cicloFolga = null;
       try {
         const cfg = await lerConfiguracoes(sheets, spreadsheetId);
-        cicloFolga = calcularCicloFolga(cfg, turnos, hojeStr);
+        cicloFolga = calcularCicloFolga(cfg, turnos, hojeStr, progresso);
       } catch (eCiclo) {
         console.error("[GET] falha ao calcular ciclo de folga:", eCiclo && eCiclo.message);
       }
@@ -688,9 +728,10 @@ export default async function handler(req, res) {
         const ativo = data.ativo === true;
         const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { modoTeste: ativo ? 'TRUE' : 'FALSE' });
         const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        const progressoCfg = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
         return res.status(200).json({
           status: "success",
-          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr, progressoCfg)
         });
       }
 
@@ -701,9 +742,10 @@ export default async function handler(req, res) {
         }
         const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { diasParaFolga: novoValor });
         const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        const progressoCfg = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
         return res.status(200).json({
           status: "success",
-          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr, progressoCfg)
         });
       }
 
@@ -711,9 +753,10 @@ export default async function handler(req, res) {
         // Zera a contagem: a partir de hoje comeca um ciclo novo.
         const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { ultimaFolga: hojeStr, pularFolgaAte: "" });
         const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        const progressoCfg = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
         return res.status(200).json({
           status: "success",
-          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr, progressoCfg)
         });
       }
 
@@ -723,9 +766,10 @@ export default async function handler(req, res) {
         const amanhaStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(amanha);
         const cfgAtual = await salvarConfiguracoes(sheets, spreadsheetId, { pularFolgaAte: amanhaStr });
         const turnosCfg = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+        const progressoCfg = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
         return res.status(200).json({
           status: "success",
-          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr)
+          cicloFolga: calcularCicloFolga(cfgAtual, turnosCfg, hojeStr, progressoCfg)
         });
       }
 
