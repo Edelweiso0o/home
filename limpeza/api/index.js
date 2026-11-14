@@ -213,8 +213,22 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
     const validColIndexes = Object.values(colMap);
     if (validColIndexes.length === 0 || headerRowIndex === -1) return;
 
-    const startRowIndex = headerRowIndex; 
-    const endRowIndex = rows.length; 
+    const startRowIndex = headerRowIndex;
+
+    // ULTIMA LINHA COM DADO, de verdade.
+    // rows.length e o tamanho do range lido (A:Z), nao dos dados: pode ter
+    // centenas de linhas vazias no fim. Formatar por rows.length pinta
+    // borda em celula vazia (foi o bug de 763 linhas vazias no Progresso Diario).
+    let endRowIndex = headerRowIndex + 1;
+    for (let i = rows.length - 1; i > headerRowIndex; i--) {
+      const row = rows[i] || [];
+      const temDado = validColIndexes.some(cIdx => String(row[cIdx] ?? "").trim() !== "");
+      if (temDado) {
+        endRowIndex = i + 1;
+        break;
+      }
+    }
+
     const startColumnIndex = Math.min(...validColIndexes);
     const endColumnIndex = Math.max(...validColIndexes) + 1;
 
@@ -475,45 +489,29 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       if (titulo) {
         const tituloLower = String(titulo).trim().toLowerCase();
         if (!titulosAdicionadosHoje.has(tituloLower)) {
-          let ultimaConclusaoMs = 0;
-          let ultimoTempoUsado = "";
+          // A PLANILHA CALCULA, O CODIGO APENAS LE.
+          // Coluna I (Ultima), J (Proxima) e F (Tempo Medio) sao formulas (MAP/FILTER/LAMBDA).
+          // Nada aqui refaz essas contas: le-se o valor ja calculado.
+          const ultimaStr = mRow[mColMap["Última"]] || "";
+          const ultimaConclusaoMs = parseDataPtBrParaMs(ultimaStr);
 
-          pData.forEach(pRow => {
-            const tVal = pRow[pColMap["Título da Missão"]] || "";
-            const stVal = normalizarStatusMissao(pRow[pColMap["Status"]]);
-            const dataVal = pRow[pColMap["Data"]] || "";
-            if (String(tVal).trim().toLowerCase() === tituloLower && stVal === 'Concluído') {
-              const dMs = parseDataPtBrParaMs(dataVal);
-              if (dMs >= ultimaConclusaoMs) {
-                ultimaConclusaoMs = dMs;
-                const tempoProg = pRow[pColMap["Tempo Estimado (Minutos)"]] || pRow[pColMap["Tempo Est. (min)"]] || "";
-                if (tempoProg !== "") {
-                  ultimoTempoUsado = tempoProg;
-                }
-              }
-            }
-          });
-
-          // Definir o tempo: prioriza o tempo da última vez feita, senão pega direto da coluna "Tempo Médio (Minutos)" da aba Missões
-          let tempoParaLancar = "";
-          if (ultimoTempoUsado !== "") {
-            tempoParaLancar = ultimoTempoUsado;
+          // Tempo: usa o "Tempo Medio (Minutos)" da coluna F.
+          // Se a formula devolver "-" (missao nunca concluida), cai no Tempo Estimado.
+          const tMedioNum = parseFloat(tempoMedio);
+          let tempoParaLancar;
+          if (!isNaN(tMedioNum) && tMedioNum > 0) {
+            tempoParaLancar = tMedioNum;
           } else {
-            const tMedioNum = parseFloat(tempoMedio);
-            if (!isNaN(tMedioNum) && tMedioNum > 0) {
-              tempoParaLancar = tMedioNum;
-            } else {
-              const tempoEst = mRow[mColMap["Tempo Estimado (Minutos)"]] || mRow[mColMap["Tempo Est. (min)"]] || "";
-              tempoParaLancar = tempoEst || 15;
-            }
+            tempoParaLancar = mRow[mColMap["Tempo Estimado (Minutos)"]] || mRow[mColMap["Tempo Est. (min)"]] || 15;
           }
 
+          // Lanca quando a data da coluna J (Proxima) ja chegou.
+          // J usa MAX(ultima + frequencia, HOJE), entao nunca fica no passado.
           let deveLancar = true;
-          if (ultimaConclusaoMs > 0 && frequenciaDias > 1) {
-            const diffDias = Math.round((hojeMs - ultimaConclusaoMs) / (1000 * 60 * 60 * 24));
-            if (diffDias < frequenciaDias) {
-              deveLancar = false;
-            }
+          const proximaStr = mRow[mColMap["Próxima"]] || "";
+          const proximaMs = parseDataPtBrParaMs(proximaStr);
+          if (proximaMs > 0 && proximaMs > hojeMs) {
+            deveLancar = false;
           }
 
           if (deveLancar) {
