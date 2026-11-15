@@ -267,6 +267,13 @@
                         <option value="15">A cada 15 dias</option>
                     </select>
                 </div>
+                <div class="flex items-center space-x-2 bg-[#090614] border border-indigo-900/60 rounded-xl px-3 py-2">
+                    <input type="checkbox" id="inputUnica" class="w-4 h-4 accent-indigo-500 cursor-pointer">
+                    <label for="inputUnica" class="text-[11px] font-mono-code text-indigo-200/90 cursor-pointer leading-tight">
+                        Frequência única (só hoje)<br>
+                        <span class="text-[10px] text-purple-300/60">não é cadastrada em Missões, só no Progresso Diário</span>
+                    </label>
+                </div>
                 <div class="flex justify-end space-x-3 pt-3 border-t border-purple-900/50">
                     <button type="button" onclick="fecharModalNovaMissao()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-[#090614] text-purple-300 border border-purple-900/60 hover:bg-purple-950/30 transition">Cancelar</button>
                     <button type="submit" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Adicionar à Fila</button>
@@ -339,6 +346,7 @@
                 </button>
             </div>
             <p class="text-xs text-purple-300/70">Ajuste diretamente a frequência (em dias) de cada missão cadastrada:</p>
+            <input type="text" id="buscaFrequencia" oninput="filtrarListaFrequencias()" placeholder="Pesquisar por título ou cômodo..." class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white placeholder-purple-400/40">
             <div id="listaConfigFrequencias" class="space-y-2.5 overflow-y-auto flex-grow pr-1"></div>
             <div class="flex justify-end pt-3 border-t border-purple-900/50">
                 <button type="button" onclick="salvarTodasFrequencias()" class="px-4 py-2 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white font-bold transition">Salvar Frequências</button>
@@ -356,6 +364,7 @@
                 </button>
             </div>
             <p class="text-xs text-purple-300/70">Selecione qual tarefa você deseja realizar novamente hoje:</p>
+            <input type="text" id="buscaDuplicar" oninput="filtrarListaDuplicar()" placeholder="Pesquisar por título ou cômodo..." class="w-full bg-[#090614] border border-purple-900/80 rounded-xl px-3 py-2 text-xs text-white placeholder-purple-400/40">
             <div id="listaOpcoesDuplicar" class="space-y-2 max-h-[50vh] overflow-y-auto pr-1"></div>
         </div>
     </div>
