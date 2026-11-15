@@ -9,6 +9,10 @@ let estadoPonto = {
 };
 
 let missoes = [];
+// Catalogo da aba "Missoes" (todas as missoes cadastradas, sem filtro de data).
+// E o que alimenta o modal de Frequencias: a aba Progresso Diario so tem as
+// missoes dos dias que ja foram lancados.
+let catalogoMissoes = [];
 let turnosRegistrados = [];
 let contadorConcluidas = 0;
 let visaoAtual = 'fila'; 
@@ -702,6 +706,12 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                     return estadoObj;
                 });
             }
+            if (data.catalogo && data.catalogo.length > 0) {
+                catalogoMissoes = data.catalogo.map(m => ({
+                    ...m,
+                    frequenciaDias: parseInt(m.frequenciaDias, 10) || 1
+                }));
+            }
             if (data.estatisticas) contadorConcluidas = data.estatisticas.concluidas || 0;
         }
 
@@ -923,6 +933,17 @@ function abrirModalDuplicarRapido() {
     const container = document.getElementById('listaOpcoesDuplicar');
     if (!modal || !container) return;
 
+    const campo = document.getElementById('buscaDuplicar');
+    if (campo) campo.value = '';
+
+    renderizarListaDuplicar('');
+    modal.classList.remove('hidden');
+}
+
+function renderizarListaDuplicar(termo) {
+    const container = document.getElementById('listaOpcoesDuplicar');
+    if (!container) return;
+
     const hojeStr = obterDataHojeStr();
     const unicasBase = {};
 
@@ -938,9 +959,9 @@ function abrirModalDuplicarRapido() {
             }
         });
 
-    const lista = Object.values(unicasBase);
+    const lista = filtrarPorBusca(Object.values(unicasBase), termo, ['_tituloBase', 'comodo']);
     if (lista.length === 0) {
-        container.innerHTML = `<p class="text-xs text-purple-300/50 p-3 text-center">Nenhuma missão de hoje disponível para repetir.</p>`;
+        container.innerHTML = `<p class="text-xs text-purple-300/50 p-3 text-center">Nenhuma missão encontrada.</p>`;
     } else {
         container.innerHTML = lista.map(m => `
             <div onclick="duplicarMissaoPorTitulo('${String(m._tituloBase).replace(/'/g, "\\'")}', '${String(m.comodo || '').replace(/'/g, "\\'")}')" class="bg-[#090614] border border-purple-900/60 p-3 rounded-xl hover:border-purple-500 cursor-pointer transition flex justify-between items-center">
@@ -952,8 +973,11 @@ function abrirModalDuplicarRapido() {
             </div>
         `).join('');
     }
+}
 
-    modal.classList.remove('hidden');
+function filtrarListaDuplicar() {
+    const campo = document.getElementById('buscaDuplicar');
+    renderizarListaDuplicar(campo ? campo.value : '');
 }
 
 function fecharModalDuplicarRapido() {
@@ -1646,33 +1670,52 @@ const OPCOES_FREQUENCIA = [
     { valor: 15, rotulo: 'A cada 15 dias' }
 ];
 
+// Lista base do modal de frequencias: o catalogo da aba "Missões" (todas as
+// missoes cadastradas). Se o catalogo ainda nao chegou, cai nas missoes do dia.
+function obterListaFrequencias() {
+    const fonte = (catalogoMissoes && catalogoMissoes.length > 0) ? catalogoMissoes : missoes;
+    return fonte.filter(m => m && m.titulo);
+}
+
+// Filtro de pesquisa por titulo/comodo (usado nos modais de frequencia e de repetir).
+function normalizarBusca(txt) {
+    return String(txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function filtrarPorBusca(lista, termo, campos) {
+    const alvo = normalizarBusca(termo);
+    if (!alvo) return lista;
+    const pedacos = alvo.split(/\s+/).filter(Boolean);
+    return lista.filter(item => {
+        const alvoItem = normalizarBusca(campos.map(c => item[c]).join(' '));
+        return pedacos.every(p => alvoItem.includes(p));
+    });
+}
+
 function abrirModalGerenciarFrequencias() {
     const modal = document.getElementById('modalGerenciarFrequencias');
     const container = document.getElementById('listaConfigFrequencias');
     if (!modal || !container) return;
 
-    // Agrupa por título-base, mantendo apenas a missão mais recente de cada
-    const unicas = {};
-    missoes.forEach(m => {
-        if (!m.titulo) return;
-        const base = m.titulo.replace(/\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, '').trim();
-        const chave = base.toLowerCase();
-        if (!unicas[chave] || (m.frequenciaDias || 1) > (unicas[chave].frequenciaDias || 1)) {
-            unicas[chave] = m;
-        }
-    });
+    const campo = document.getElementById('buscaFrequencia');
+    if (campo) campo.value = '';
 
-    const lista = Object.values(unicas).sort((a, b) =>
-        a.comodo.localeCompare(b.comodo) || a.titulo.localeCompare(b.titulo)
-    );
+    renderizarListaFrequencias('');
+    modal.classList.remove('hidden');
+}
+
+function renderizarListaFrequencias(termo) {
+    const container = document.getElementById('listaConfigFrequencias');
+    if (!container) return;
+
+    const base = obterListaFrequencias();
+    const lista = filtrarPorBusca(base, termo, ['titulo', 'comodo'])
+        .sort((a, b) => String(a.comodo || '').localeCompare(String(b.comodo || '')) || String(a.titulo || '').localeCompare(String(b.titulo || '')));
 
     if (lista.length === 0) {
         container.innerHTML = '<p class="text-xs text-purple-300/50 text-center py-6">Nenhuma missão encontrada.</p>';
-        modal.classList.remove('hidden');
         return;
     }
-
-    const freqAtual = parseInt(document.getElementById('inputFrequencia') ? document.getElementById('inputFrequencia').value : 1, 10) || 1;
 
     container.innerHTML = lista.map(m => {
         const freq = parseInt(m.frequenciaDias, 10) || 1;
@@ -1682,7 +1725,8 @@ function abrirModalGerenciarFrequencias() {
             opcoes.push({ valor: freq, rotulo: `A cada ${freq} dias` });
             opcoes.sort((a, b) => a.valor - b.valor);
         }
-        const tituloEscapado = m.titulo.replace(/"/g, '&quot;');
+        const tituloEscapado = String(m.titulo).replace(/"/g, '&quot;');
+        const comodoEscapado = String(m.comodo || '').replace(/"/g, '&quot;');
 
         return `
             <div class="flex items-center justify-between gap-3 bg-[#090614] border border-purple-900/60 rounded-xl px-3 py-2">
@@ -1690,14 +1734,17 @@ function abrirModalGerenciarFrequencias() {
                     <div class="text-xs font-bold text-white truncate">${m.titulo}</div>
                     <div class="text-[10px] text-purple-300/60 font-mono-code">${m.comodo || 'Sem cômodo'}</div>
                 </div>
-                <select data-titulo="${tituloEscapado}" class="bg-[#17112d] border border-purple-900/80 rounded-lg px-2 py-1 text-xs text-white shrink-0">
+                <select data-titulo="${tituloEscapado}" data-comodo="${comodoEscapado}" class="bg-[#17112d] border border-purple-900/80 rounded-lg px-2 py-1 text-xs text-white shrink-0">
                     ${opcoes.map(o => `<option value="${o.valor}"${o.valor === freq ? ' selected' : ''}>${o.rotulo}</option>`).join('')}
                 </select>
             </div>
         `;
     }).join('');
+}
 
-    modal.classList.remove('hidden');
+function filtrarListaFrequencias() {
+    const campo = document.getElementById('buscaFrequencia');
+    renderizarListaFrequencias(campo ? campo.value : '');
 }
 
 function fecharModalGerenciarFrequencias() {
@@ -1715,14 +1762,17 @@ async function salvarTodasFrequencias() {
         return;
     }
 
+    // Compara com o valor de ORIGEM (catalogo), nao com o que a tela mostra agora.
+    const fonte = obterListaFrequencias();
     const alteracoes = [];
     selects.forEach(sel => {
         const titulo = sel.getAttribute('data-titulo');
+        const comodo = sel.getAttribute('data-comodo') || '';
         const novaFreq = parseInt(sel.value, 10) || 1;
-        const missao = missoes.find(m => m.titulo === titulo);
-        const freqAntiga = missao ? (parseInt(missao.frequenciaDias, 10) || 1) : null;
+        const orig = fonte.find(m => String(m.titulo) === titulo && String(m.comodo || '') === comodo);
+        const freqAntiga = orig ? (parseInt(orig.frequenciaDias, 10) || 1) : null;
         if (freqAntiga !== null && freqAntiga !== novaFreq) {
-            alteracoes.push({ titulo, frequenciaDias: novaFreq });
+            alteracoes.push({ titulo, comodo, frequenciaDias: novaFreq });
         }
     });
 
@@ -1734,8 +1784,10 @@ async function salvarTodasFrequencias() {
 
     // Atualiza o estado local na hora, para a tela responder imediatamente
     alteracoes.forEach(a => {
-        missoes.forEach(m => {
-            if (m.titulo === a.titulo) m.frequenciaDias = a.frequenciaDias;
+        [catalogoMissoes, missoes].forEach(arr => {
+            arr.forEach(m => {
+                if (String(m.titulo) === a.titulo && String(m.comodo || '') === a.comodo) m.frequenciaDias = a.frequenciaDias;
+            });
         });
     });
     salvarDadosLocalStorage();
@@ -1747,7 +1799,7 @@ async function salvarTodasFrequencias() {
         const resultados = await Promise.all(alteracoes.map(a =>
             chamarAPI(API_URL, {
                 method: "POST",
-                body: JSON.stringify({ acao: 'editarFrequencia', titulo: a.titulo, frequenciaDias: a.frequenciaDias })
+                body: JSON.stringify({ acao: 'editarFrequencia', titulo: a.titulo, comodo: a.comodo, frequenciaDias: a.frequenciaDias })
             }).then(r => r.json()).catch(() => ({ status: 'error' }))
         ));
 
@@ -1758,8 +1810,7 @@ async function salvarTodasFrequencias() {
         } else {
             mostrarNotificacao("Atenção", `${falhas} de ${alteracoes.length} não foram salvas no servidor.`, "aviso", 4000);
         }
-        // carregarDadosDoServidor ja substitui "missoes" pelo que esta na planilha
-        // e chama renderizarVisaoAtual(). Basta esperar, para a lista refletir a nova frequencia.
+        // recarrega do servidor para refletir exatamente o que ficou na planilha
         await carregarDadosDoServidor(false);
     } catch (erro) {
         console.error("Erro ao salvar frequências:", erro);
