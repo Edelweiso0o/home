@@ -104,20 +104,22 @@ function parseSheetRows(rows) {
 
 // Abas que o painel de exclusao pode manipular.
 // A ordem importa: e a mesma em que aparecem na tela.
-const ABAS_PAINEL = ["Missões", "Progresso Diário", "Registro de Ponto"];
+const ABAS_PAINEL = ["Missões", "Progresso Diário", "Registro de Ponto", "Conquistas"];
 
 // Titulo amigavel de cada aba, para o front nao precisar traduzir.
 const ROTULO_ABA = {
   "Missões": "Missões",
   "Progresso Diário": "Progresso Diário",
-  "Registro de Ponto": "Registro de Ponto"
+  "Registro de Ponto": "Registro de Ponto",
+  "Conquistas": "Conquistas"
 };
 
 // Colunas que devem aparecer na previa de cada aba.
 const COLUNAS_PREVIA = {
   "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade"],
   "Progresso Diário": ["ID", "Data", "Título da Missão", "Cômodo", "Status", "Hora de Início", "Hora de Término"],
-  "Registro de Ponto": ["ID Turno", "Data", "Hora Entrada", "Hora Saída", "Tempo Trabalhado", "Status do Turno"]
+  "Registro de Ponto": ["ID Turno", "Data", "Hora Entrada", "Hora Saída", "Tempo Trabalhado", "Status do Turno"],
+  "Conquistas": ["ID", "Título", "Raridade", "Tipo de Meta", "Filtro", "Meta", "Progresso Atual", "Status", "Data Conquista"]
 };
 
 // Le uma aba e devolve as linhas prontas para a previa, com o numero REAL da linha
@@ -598,6 +600,225 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
   }
 }
 
+// ===== CONQUISTAS (TROFEUS) =====
+// Aba "Conquistas": linha 1 vazia, cabecalho na linha 2, dados da linha 3, coluna A vazia.
+const ABA_CONQUISTAS = "Conquistas";
+const COLS_CONQUISTAS = ["ID", "Título", "Descrição", "Ícone", "Raridade", "Tipo de Meta", "Filtro", "Meta", "Progresso Atual", "Status", "Data Conquista"];
+const TIPOS_META = {
+  missoes_total: "Missões concluídas (total)",
+  missoes_comodo: "Missões concluídas em um cômodo",
+  missoes_tarefa: "Vezes que concluiu uma tarefa",
+  dias_zerados: "Dias zerados",
+  sequencia_dias: "Sequência de dias zerados",
+  dias_trabalhados: "Dias trabalhados",
+  tempo_economizado: "Tempo economizado (min)"
+};
+const RARIDADES = ["Comum", "Raro", "Épico", "Lendário"];
+
+const CONQUISTAS_INICIAIS = [
+  ["Primeiro Passo", "Conclua sua primeira missão.", "🧹", "Comum", "missoes_total", "", 1],
+  ["Mãos à Obra", "Conclua 10 missões.", "🧽", "Comum", "missoes_total", "", 10],
+  ["Faxineiro Dedicado", "Conclua 50 missões.", "🪣", "Raro", "missoes_total", "", 50],
+  ["Mestre da Limpeza", "Conclua 200 missões.", "💎", "Épico", "missoes_total", "", 200],
+  ["Dia Zerado", "Conclua todas as missões de um dia.", "🏆", "Comum", "dias_zerados", "", 1],
+  ["Semana Impecável", "7 dias zerados em sequência.", "🔥", "Raro", "sequencia_dias", "", 7],
+  ["Lenda da Casa", "30 dias zerados em sequência.", "👑", "Lendário", "sequencia_dias", "", 30],
+  ["Ciclo Completo", "Trabalhe 9 dias.", "📅", "Raro", "dias_trabalhados", "", 9],
+  ["Relâmpago", "Economize 60 minutos no total.", "⚡", "Épico", "tempo_economizado", "", 60]
+];
+
+function chaveTipoMeta(valor) {
+  const v = String(valor || "").trim();
+  if (TIPOS_META[v]) return v;
+  const achada = Object.keys(TIPOS_META).find(k => TIPOS_META[k].toLowerCase() === v.toLowerCase());
+  return achada || "";
+}
+
+function horaParaSeg(h) {
+  const m = String(h || "").trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  return m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+(m[3] || 0)) : null;
+}
+
+function normTxt(s) {
+  return String(s || "").normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+async function garantirAbaConquistas(sheets, spreadsheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  if (meta.data.sheets.some(s => s.properties.title === ABA_CONQUISTAS)) return false;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ addSheet: { properties: { title: ABA_CONQUISTAS } } }] }
+  });
+
+  const linhas = CONQUISTAS_INICIAIS.map((c, i) => [
+    1000 + i + 1, c[0], c[1], c[2], c[3], TIPOS_META[c[4]], c[5], c[6], 0, "Bloqueada", ""
+  ]);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${ABA_CONQUISTAS}!B2`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [COLS_CONQUISTAS, ...linhas] }
+  });
+  await formatarTabelaCompleta(sheets, spreadsheetId, ABA_CONQUISTAS);
+  return true;
+}
+
+async function lerConquistasBrutas(sheets, spreadsheetId) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${ABA_CONQUISTAS}!A:Z` });
+  const rows = res.data.values || [];
+  const { colMap, dataRows } = parseSheetRows(rows);
+  const g = (row, nome) => (colMap[nome] !== undefined && row[colMap[nome]] !== undefined) ? String(row[colMap[nome]]) : "";
+  const lista = [];
+  dataRows.forEach((row, idx) => {
+    if (!g(row, "Título").trim()) return;
+    const tipoChave = chaveTipoMeta(g(row, "Tipo de Meta"));
+    lista.push({
+      linha: idx + LINHA_CABECALHO + 2,
+      id: g(row, "ID"),
+      titulo: g(row, "Título"),
+      descricao: g(row, "Descrição"),
+      icone: g(row, "Ícone") || "🏆",
+      raridade: RARIDADES.includes(g(row, "Raridade")) ? g(row, "Raridade") : "Comum",
+      tipoChave,
+      tipo: TIPOS_META[tipoChave] || g(row, "Tipo de Meta"),
+      filtro: g(row, "Filtro"),
+      meta: Math.max(1, parseFloat(g(row, "Meta")) || 1),
+      progresso: parseFloat(g(row, "Progresso Atual")) || 0,
+      status: normTxt(g(row, "Status")).startsWith("desbloq") ? "Desbloqueada" : "Bloqueada",
+      dataConquista: g(row, "Data Conquista")
+    });
+  });
+  return { lista, colMap, totalLinhas: rows.length, rows };
+}
+
+function calcularMetricasConquistas(progresso, turnos) {
+  const concl = (progresso || []).filter(p => p.status === 'Concluído');
+
+  // dias com missoes
+  const porDia = new Map();
+  (progresso || []).forEach(p => {
+    const d = normalizarData(p.data);
+    const ms = parseDataPtBrParaMs(d);
+    if (!d || !ms) return;
+    const r = porDia.get(d) || { ms, total: 0, concl: 0 };
+    r.total++;
+    if (p.status === 'Concluído') r.concl++;
+    porDia.set(d, r);
+  });
+  const diasTurno = new Set();
+  (turnos || []).forEach(t => { const d = normalizarData(t.data); if (d) diasTurno.add(d); });
+
+  let diasZerados = 0, melhor = 0, atual = 0;
+  Array.from(porDia.entries()).sort((a, b) => a[1].ms - b[1].ms).forEach(([d, r]) => {
+    const valido = r.total > 0 && r.concl === r.total;
+    if (valido) diasZerados++;
+    if (valido && diasTurno.has(d)) { atual++; if (atual > melhor) melhor = atual; }
+    else atual = 0;
+  });
+
+  let economizadoSeg = 0;
+  concl.forEach(p => {
+    const est = (parseFloat(p.tempoEstimado) || 0) * 60;
+    const ini = horaParaSeg(p["Hora de Início"]);
+    const fim = horaParaSeg(p["Hora de Término"]);
+    if (est > 0 && ini !== null && fim !== null && fim >= ini) {
+      const real = fim - ini;
+      if (est > real) economizadoSeg += (est - real);
+    }
+  });
+
+  return { concl, diasZerados, sequencia: melhor, diasTrabalhados: diasTurno.size, economizadoMin: Math.floor(economizadoSeg / 60) };
+}
+
+function progressoDaConquista(c, m) {
+  switch (c.tipoChave) {
+    case 'missoes_total': return m.concl.length;
+    case 'missoes_comodo': return m.concl.filter(p => normTxt(p.comodo) === normTxt(c.filtro)).length;
+    case 'missoes_tarefa': return m.concl.filter(p => normTxt(p.titulo) === normTxt(c.filtro)).length;
+    case 'dias_zerados': return m.diasZerados;
+    case 'sequencia_dias': return m.sequencia;
+    case 'dias_trabalhados': return m.diasTrabalhados;
+    case 'tempo_economizado': return m.economizadoMin;
+    default: return 0;
+  }
+}
+
+// Recalcula o progresso, grava so o que mudou e devolve as conquistas + as recem-desbloqueadas.
+async function avaliarConquistas(sheets, spreadsheetId) {
+  await garantirAbaConquistas(sheets, spreadsheetId);
+  const progresso = await getSheetData(sheets, spreadsheetId, "Progresso Diário!A:Z");
+  const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
+  const metricas = calcularMetricasConquistas(progresso, turnos);
+  const { lista, colMap } = await lerConquistasBrutas(sheets, spreadsheetId);
+
+  const agoraStr = `${getDataHojeStr()} ${getHoraAtualStr().slice(0, 5)}`;
+  const updates = [];
+  const novas = [];
+  const col = nome => columnToLetter(colMap[nome] + 1);
+
+  lista.forEach(c => {
+    const bruto = progressoDaConquista(c, metricas);
+    const prog = Math.min(bruto, c.meta);
+    const novoProg = c.status === 'Desbloqueada' ? Math.max(prog, c.meta) : prog;
+    if (colMap["Progresso Atual"] !== undefined && novoProg !== c.progresso) {
+      updates.push({ range: `${ABA_CONQUISTAS}!${col("Progresso Atual")}${c.linha}`, values: [[novoProg]] });
+    }
+    c.progresso = novoProg;
+    if (c.status !== 'Desbloqueada' && bruto >= c.meta) {
+      c.status = 'Desbloqueada';
+      c.dataConquista = agoraStr;
+      novas.push({ id: c.id, titulo: c.titulo, icone: c.icone, raridade: c.raridade });
+      if (colMap["Status"] !== undefined) updates.push({ range: `${ABA_CONQUISTAS}!${col("Status")}${c.linha}`, values: [["Desbloqueada"]] });
+      if (colMap["Data Conquista"] !== undefined) updates.push({ range: `${ABA_CONQUISTAS}!${col("Data Conquista")}${c.linha}`, values: [[agoraStr]] });
+    }
+  });
+
+  if (updates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'RAW', data: updates } });
+  }
+  return { conquistas: lista, novas };
+}
+
+async function adicionarConquista(sheets, spreadsheetId, d) {
+  await garantirAbaConquistas(sheets, spreadsheetId);
+  const titulo = String(d.titulo || "").trim();
+  const tipoChave = chaveTipoMeta(d.tipoMeta);
+  const meta = parseFloat(d.meta);
+  if (!titulo) return { erro: "Informe o título." };
+  if (!tipoChave) return { erro: "Tipo de meta inválido." };
+  if (!Number.isFinite(meta) || meta < 1 || meta > 100000) return { erro: "A meta deve ser um número entre 1 e 100000." };
+  const filtro = String(d.filtro || "").trim();
+  if ((tipoChave === 'missoes_comodo' || tipoChave === 'missoes_tarefa') && !filtro) return { erro: "Este tipo de meta precisa do cômodo/tarefa." };
+  const raridade = RARIDADES.includes(d.raridade) ? d.raridade : "Comum";
+
+  const { lista, colMap, rows } = await lerConquistasBrutas(sheets, spreadsheetId);
+  if (lista.some(c => normTxt(c.titulo) === normTxt(titulo))) return { erro: "Já existe uma conquista com esse título." };
+
+  let maxId = 1000;
+  lista.forEach(c => { const n = parseInt(c.id, 10); if (!isNaN(n) && n > maxId) maxId = n; });
+
+  // proxima linha livre: depois da ultima linha com dado (nunca append em "Aba!A")
+  let ultima = LINHA_CABECALHO + 1;
+  for (let i = rows.length - 1; i > LINHA_CABECALHO; i--) {
+    if ((rows[i] || []).some(v => String(v || "").trim() !== "")) { ultima = i + 1; break; }
+  }
+  const proxima = ultima + 1;
+
+  const valores = {
+    "ID": maxId + 1, "Título": titulo, "Descrição": String(d.descricao || "").trim(),
+    "Ícone": String(d.icone || "🏆").trim() || "🏆", "Raridade": raridade,
+    "Tipo de Meta": TIPOS_META[tipoChave], "Filtro": filtro, "Meta": meta,
+    "Progresso Atual": 0, "Status": "Bloqueada", "Data Conquista": ""
+  };
+  const ordem = COLS_CONQUISTAS.filter(n => colMap[n] !== undefined);
+  const data = ordem.map(n => ({ range: `${ABA_CONQUISTAS}!${columnToLetter(colMap[n] + 1)}${proxima}`, values: [[valores[n]]] }));
+  await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'RAW', data } });
+  await formatarTabelaCompleta(sheets, spreadsheetId, ABA_CONQUISTAS);
+  return { id: maxId + 1 };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.setHeader('CDN-Cache-Control', 'no-store');
@@ -646,6 +867,11 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
+      if (String(req.query && req.query.conquistas || '') === '1') {
+        const r = await avaliarConquistas(sheets, spreadsheetId);
+        return res.status(200).json({ status: "success", ...r });
+      }
+
       // Painel de exclusao: lista as linhas de uma aba (ou de todas)
       if (String(req.query && req.query.painel || '') === 'linhas') {
         const abaPedida = req.query.aba;
@@ -654,6 +880,7 @@ export default async function handler(req, res) {
         const resultado = [];
         for (const nomeAba of abas) {
           if (!ABAS_PAINEL.includes(nomeAba)) continue;
+          if (nomeAba === ABA_CONQUISTAS) await garantirAbaConquistas(sheets, spreadsheetId);
           const dados = await lerAbaParaPainel(sheets, spreadsheetId, nomeAba);
           resultado.push({
             aba: nomeAba,
@@ -728,6 +955,13 @@ export default async function handler(req, res) {
       const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const acao = data.acao;
       const hojeStr = getDataHojeStr();
+
+      if (acao === 'adicionarConquista') {
+        const r = await adicionarConquista(sheets, spreadsheetId, data);
+        if (r.erro) return res.status(400).json({ status: "error", message: r.erro });
+        const av = await avaliarConquistas(sheets, spreadsheetId);
+        return res.status(200).json({ status: "success", id: r.id, ...av });
+      }
 
       if (acao === 'testarFolga') {
         const ativo = data.ativo === true;
