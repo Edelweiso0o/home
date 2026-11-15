@@ -712,7 +712,10 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         status: "success",
+        // Sem nenhuma linha na aba Progresso Diario ainda, cai para o catalogo de
+        // Missoes, senao a tela abre vazia e o modal de frequencias nao lista nada.
         missoes: progresso.length > 0 ? progresso : missoes,
+        catalogo: missoes,
         turnos: turnos,
         pontoAtivo: pontoAtivo,
         horaEntradaMs: horaEntradaMs,
@@ -899,11 +902,13 @@ export default async function handler(req, res) {
         //   2) o titulo ja vem com sufixo de repeticao (II, III, IV...)
         const sufixoRepeticao = /\s(I{2,3}|IV|VI{0,3}|IX|X)$/i.test(tituloDesejado);
         const ehRepeticao = data.repeticao === true || sufixoRepeticao;
+        // Missao unica: existe so no dia (aba Progresso Diario). Nunca vai para a aba Missoes.
+        const ehUnica = data.missaoUnica === true || data.unica === true;
 
-        let missaoExistenteNaAba = ehRepeticao ? null
+        let missaoExistenteNaAba = (ehRepeticao || ehUnica) ? null
           : mParsed.dataRows.find(r => String(r[mColMap["Título da Missão"]] || "").trim().toLowerCase() === tituloDesejadoLower);
 
-        if (!ehRepeticao && !missaoExistenteNaAba) {
+        if (!ehRepeticao && !ehUnica && !missaoExistenteNaAba) {
           // Só adiciona na aba Missões se realmente não existir nenhuma com esse nome (garantindo que missões repetidas sejam únicas)
           let maxIdMissao = 999;
           mParsed.dataRows.forEach(r => {
@@ -1059,15 +1064,27 @@ export default async function handler(req, res) {
         const mColMap = mParsed.colMap;
         const mDataRows = mParsed.dataRows;
 
+        // Duas missoes podem ter o MESMO titulo em comodos diferentes
+        // ("Juntar o lixo" no Quarto e no Banheiro). O comodo desempata.
+        const comodoBusca = String(data.comodo || "").trim().toLowerCase();
         let mLinhaAlvo = -1;
+        let mIdxAlvo = -1;
         mDataRows.forEach((row, idx) => {
           const tVal = String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase();
-          if (tVal === tituloBusca) {
-            mLinhaAlvo = idx + (missoesRes.data.values.length - mDataRows.length + 1);
+          if (tVal !== tituloBusca) return;
+          if (comodoBusca && mColMap["Cômodo"] !== undefined) {
+            const cVal = String(row[mColMap["Cômodo"]] || "").trim().toLowerCase();
+            if (cVal !== comodoBusca) return;
           }
+          mIdxAlvo = idx;
+          mLinhaAlvo = idx + (missoesRes.data.values.length - mDataRows.length + 1);
         });
 
-        if (mLinhaAlvo !== -1 && mColMap["Frequência (Dias)"] !== undefined) {
+        if (mLinhaAlvo === -1) {
+          return res.status(409).json({ status: "error", message: "Missão não encontrada na aba Missões." });
+        }
+
+        if (mColMap["Frequência (Dias)"] !== undefined) {
           await sheets.spreadsheets.values.update({
             spreadsheetId,
             range: `Missões!${columnToLetter(mColMap["Frequência (Dias)"] + 1)}${mLinhaAlvo}`,
@@ -1076,7 +1093,43 @@ export default async function handler(req, res) {
           });
         }
 
-        return res.status(200).json({ status: "success" });
+        // A missao de HOJE tambem existe na aba Progresso Diario, com a frequencia
+        // copiada no lancamento. Sem atualizar la tambem, o app volta a mostrar
+        // a frequencia antiga e o valor gravado em Missoes nao aparece.
+        const comodoAlvo = mColMap["Cômodo"] !== undefined
+          ? String(mDataRows[mIdxAlvo][mColMap["Cômodo"]] || "").trim().toLowerCase()
+          : "";
+        const progRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Progresso Diário!A:Z" });
+        const pRows = progRes.data.values || [];
+        const pParsed = parseSheetRows(pRows);
+        const pColMap = pParsed.colMap;
+        const colFreqP = pColMap["Frequência (Dias)"];
+        const colTitP = pColMap["Título da Missão"];
+        const colComP = pColMap["Cômodo"];
+        const colStP = pColMap["Status"];
+
+        if (colFreqP !== undefined && colTitP !== undefined) {
+          const updates = [];
+          pParsed.dataRows.forEach((row, idx) => {
+            if (String(row[colTitP] || "").trim().toLowerCase() !== tituloBusca) return;
+            if (comodoAlvo && colComP !== undefined && String(row[colComP] || "").trim().toLowerCase() !== comodoAlvo) return;
+            // nao mexe no historico: so linhas que ainda nao foram concluidas/canceladas
+            if (colStP !== undefined) {
+              const st = normalizarStatusMissao(row[colStP]);
+              if (st === 'Concluído' || st === 'Cancelado') return;
+            }
+            const linhaReal = idx + pParsed.headerRowIndex + 2;
+            updates.push({ range: `Progresso Diário!${columnToLetter(colFreqP + 1)}${linhaReal}`, values: [[novaFreq]] });
+          });
+          if (updates.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+            });
+          }
+        }
+
+        return res.status(200).json({ status: "success", atualizou: true, linha: mLinhaAlvo });
       }
 
       if (acao === 'excluirLinhas') {
