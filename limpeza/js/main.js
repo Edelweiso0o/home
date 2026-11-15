@@ -680,9 +680,20 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
                     } else if (estadoObj.status === 'Em Andamento') {
                         estadoObj.estadoMissao = 'EmAndamento';
                         let mLocal = missoes.find(x => String(x.id) === String(mServidor.id));
+                        // A resposta do servidor pode chegar ANTES de a planilha gravar a
+                        // hora de inicio. Sem hora local e sem hora da planilha, a missao
+                        // fica "Em Andamento" sem cronometro (relogio zerado). Nesse caso
+                        // aproveita a hora da planilha ou fixa o inicio agora, uma vez so.
                         if (mLocal && mLocal.tempoInicioMs) {
                             estadoObj.tempoInicioMs = mLocal.tempoInicioMs;
                             if (mLocal.horaInicioStr) estadoObj.horaInicioStr = mLocal.horaInicioStr;
+                        } else {
+                            const inicioMs = msDoHoraString(mServidor["Hora de Início"]);
+                            estadoObj.tempoInicioMs = inicioMs || Date.now();
+                            estadoObj.horaInicioStr = String(new Date(estadoObj.tempoInicioMs).getHours()).padStart(2, '0') + ":" + String(new Date(estadoObj.tempoInicioMs).getMinutes()).padStart(2, '0');
+                            // fixa no estado em memoria para as proximas respostas nao recalcularem
+                            const alvoFix = missoes.find(x => String(x.id) === String(mServidor.id));
+                            if (alvoFix) { alvoFix.tempoInicioMs = estadoObj.tempoInicioMs; alvoFix.horaInicioStr = estadoObj.horaInicioStr; }
                         }
                     } else {
                         estadoObj.tempoInicioMs = null;
@@ -705,6 +716,18 @@ async function carregarDadosDoServidor(forcarVerificacao = true) {
     renderizarVisaoAtual();
 }
 
+// Converte "HH:MM" ou "HH:MM:SS" de hoje para milissegundos (0 se vazio/invalido).
+function msDoHoraString(valor) {
+    const txt = String(valor || '').trim();
+    const partes = txt.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!partes) return 0;
+    const d = new Date();
+    d.setHours(parseInt(partes[1], 10), parseInt(partes[2], 10), parseInt(partes[3] || '0', 10), 0);
+    return d.getTime();
+}
+
+let filaRecarregar = Promise.resolve();
+
 async function sincronizarComServidorEmSegundoPlano(acao, payload) {
     try {
         const response = await chamarAPI(API_URL, {
@@ -713,7 +736,9 @@ async function sincronizarComServidorEmSegundoPlano(acao, payload) {
         });
         const resJson = await response.json();
         if (resJson && resJson.status === 'success') {
-            carregarDadosDoServidor(false);
+            // serializa: uma resposta antiga nunca pode sobrescrever um estado mais novo
+            // (era isso que fazia a missao "voltar para iniciar" ao concluir outra).
+            filaRecarregar = filaRecarregar.then(() => carregarDadosDoServidor(false));
         }
         return resJson;
     } catch (error) {
