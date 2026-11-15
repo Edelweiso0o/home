@@ -82,6 +82,11 @@ function mostrarNotificacao(titulo, mensagem, tipo = 'info', duracaoMs = 3000) {
         corIcone = 'text-amber-400';
         iconeFa = 'fa-triangle-exclamation';
         corBarra = 'bg-amber-500';
+    } else if (tipo === 'vitoria') {
+        corBorda = 'border-amber-400/70';
+        corIcone = 'text-amber-300';
+        iconeFa = 'fa-trophy';
+        corBarra = 'bg-amber-400';
     } else if (tipo === 'sincronizando') {
         corBorda = 'border-indigo-500/60';
         corIcone = 'text-indigo-400 animate-spin';
@@ -1232,8 +1237,19 @@ function concluirMissao(id) {
 
     salvarDadosLocalStorage();
     renderizarVisaoAtual();
-    
-    mostrarNotificacao("Missão Concluída!", "Tarefa finalizada com sucesso.", "sucesso", 2500);
+
+    const hojeStr = obterDataHojeStr();
+    const aindaPendentes = missoes.some(m => {
+        if (m.data && m.data !== hojeStr) return false;
+        const st = (m.status || '').trim();
+        return st !== 'Concluído' && st !== 'Cancelado';
+    });
+
+    if (!aindaPendentes) {
+        mostrarNotificacao("🏆 Dia Zerado!", "Todas as missões de hoje foram cumpridas. Parabéns e bom descanso!", "vitoria", 4500);
+    } else {
+        mostrarNotificacao("Missão Concluída!", "Tarefa finalizada com sucesso.", "sucesso", 2500);
+    }
 
     sincronizarComServidorEmSegundoPlano('concluirMissao', { 
         id: missao.id,
@@ -1318,12 +1334,99 @@ function renderizarMissoes() {
     });
 
     if (missoesAtivas.length === 0) {
-        container.innerHTML = `
-            <div class="bg-[#17112d] border border-purple-900/50 p-8 rounded-2xl text-center space-y-2">
-                <i class="fa-solid fa-check-double text-2xl text-purple-400/50"></i>
-                <p class="text-xs text-purple-200/70 font-mono-code">Nenhuma missão encontrada na fila com esses filtros.</p>
-            </div>
-        `;
+        const missoesHoje = missoes.filter(m => !m.data || m.data === hojeStr);
+        const totalPendentesHoje = missoesHoje.filter(m => {
+            const st = (m.status || '').trim();
+            return st !== 'Concluído' && st !== 'Cancelado';
+        }).length;
+        const concluidasHoje = missoesHoje.filter(m => (m.status || '').trim() === 'Concluído');
+        const totalCanceladasHoje = missoesHoje.filter(m => (m.status || '').trim() === 'Cancelado').length;
+
+        if (totalPendentesHoje === 0 && concluidasHoje.length > 0) {
+            let tempoGanhoMin = 0;
+            let tempoTotalMin = 0;
+            concluidasHoje.forEach(m => {
+                const est = parseFloat(m.tempoEstimado) || 0;
+                const real = m.tempoRealMin || est;
+                tempoTotalMin += real;
+                if (est - real > 0) tempoGanhoMin += (est - real);
+            });
+
+            const taxaConclusao = missoesHoje.length > 0 ? concluidasHoje.length / missoesHoje.length : 1;
+            let rank = 'A';
+            let rankCor = 'text-emerald-300 border-emerald-400/50 bg-emerald-500/15';
+            if (taxaConclusao === 1 && tempoGanhoMin > 0) {
+                rank = 'S';
+                rankCor = 'text-amber-300 border-amber-400/60 bg-amber-500/20';
+            } else if (totalCanceladasHoje > concluidasHoje.length) {
+                rank = 'B';
+                rankCor = 'text-purple-300 border-purple-400/50 bg-purple-500/15';
+            }
+
+            container.innerHTML = `
+                <div class="card-vitoria-dia relative overflow-hidden bg-gradient-to-br from-[#1b1438] via-[#17112d] to-[#111c2b] border border-amber-400/40 p-8 rounded-2xl text-center space-y-4">
+                    <div class="vitoria-brilho"></div>
+                    <div class="relative inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-400/50 text-amber-300 shadow-lg shadow-amber-500/20 trofeu-flutuar">
+                        <i class="fa-solid fa-trophy text-3xl"></i>
+                    </div>
+                    <div class="relative space-y-1.5">
+                        <div class="inline-flex items-center space-x-2 px-3 py-0.5 rounded-full border ${rankCor} text-[10px] font-bold font-mono-code uppercase tracking-widest">
+                            <i class="fa-solid fa-star text-[9px]"></i>
+                            <span>Rank do Dia: ${rank}</span>
+                        </div>
+                        <h3 class="text-lg font-black uppercase tracking-wider text-white">Dia Zerado! Missões Cumpridas</h3>
+                        <p class="text-xs text-purple-200/80 max-w-md mx-auto leading-relaxed">
+                            Valeu pelo esforço de hoje — casa em ordem e dever cumprido. Aproveite seu descanso!
+                        </p>
+                    </div>
+                    <div class="relative grid grid-cols-3 gap-2 max-w-md mx-auto pt-1 font-mono-code">
+                        <div class="bg-[#090614]/80 border border-emerald-500/30 rounded-xl px-3 py-2">
+                            <div class="text-[10px] text-purple-300/60 uppercase">Concluídas</div>
+                            <div class="text-sm font-black text-emerald-400">${concluidasHoje.length}</div>
+                        </div>
+                        <div class="bg-[#090614]/80 border border-amber-500/30 rounded-xl px-3 py-2">
+                            <div class="text-[10px] text-purple-300/60 uppercase">Tempo Ganho</div>
+                            <div class="text-sm font-black text-amber-300">+${tempoGanhoMin}m</div>
+                        </div>
+                        <div class="bg-[#090614]/80 border border-purple-500/30 rounded-xl px-3 py-2">
+                            <div class="text-[10px] text-purple-300/60 uppercase">Tempo Ativo</div>
+                            <div class="text-sm font-black text-purple-200">${tempoTotalMin}m</div>
+                        </div>
+                    </div>
+                    <div class="relative flex justify-center gap-2 pt-1">
+                        <button onclick="mudarVisaoPrincipal('historico')" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/50 text-purple-200 border border-purple-700/60 transition flex items-center space-x-1.5">
+                            <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
+                            <span>Ver Histórico</span>
+                        </button>
+                        <button onclick="abrirModalDuplicarRapido()" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-400/40 transition flex items-center space-x-1.5">
+                            <i class="fa-solid fa-plus text-amber-300"></i>
+                            <span>Missão Extra</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else if (totalPendentesHoje > 0) {
+            container.innerHTML = `
+                <div class="bg-[#17112d] border border-purple-900/50 p-8 rounded-2xl text-center space-y-2">
+                    <i class="fa-solid fa-filter text-2xl text-purple-400/50"></i>
+                    <p class="text-xs text-purple-200/70 font-mono-code">Nenhuma missão encontrada na fila com esses filtros.</p>
+                </div>
+            `;
+        } else if (!estadoPonto.trabalhando) {
+            container.innerHTML = `
+                <div class="bg-[#17112d] border border-purple-900/50 p-8 rounded-2xl text-center space-y-2">
+                    <i class="fa-solid fa-gamepad text-2xl text-purple-400/60"></i>
+                    <p class="text-xs text-purple-200/80 font-mono-code">Bata o ponto no topo para iniciar as missões de hoje.</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="bg-[#17112d] border border-purple-900/50 p-8 rounded-2xl text-center space-y-2">
+                    <i class="fa-solid fa-check-double text-2xl text-purple-400/50"></i>
+                    <p class="text-xs text-purple-200/70 font-mono-code">Nenhuma missão pendente para hoje.</p>
+                </div>
+            `;
+        }
         return;
     }
 
@@ -1570,12 +1673,20 @@ function atualizarEstatisticasGerais() {
 
     const boxPend = document.getElementById('boxPendentesPorComodo');
     const tagTotalPend = document.getElementById('totalPendentesTag');
-    if (tagTotalPend) tagTotalPend.innerText = pendentesTotal;
+    const diaZerado = pendentesTotal === 0 && concluidasTotal > 0;
+    if (tagTotalPend) {
+        tagTotalPend.innerText = diaZerado ? 'ZERADO' : pendentesTotal;
+        tagTotalPend.className = diaZerado
+            ? 'text-[10px] font-bold font-mono-code text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-400/40'
+            : 'text-xs font-bold font-mono-code text-white bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30';
+    }
 
     if (boxPend) {
         const chavesPend = Object.keys(pendentesPorComodo);
         if (chavesPend.length === 0) {
-            boxPend.innerHTML = `<span class="col-span-2 text-purple-300/40 italic">Nenhuma pendente</span>`;
+            boxPend.innerHTML = diaZerado
+                ? `<span class="col-span-2 text-emerald-300 font-semibold flex items-center gap-1.5"><i class="fa-solid fa-sparkles text-amber-300"></i> Tudo limpo! Bom descanso</span>`
+                : `<span class="col-span-2 text-purple-300/40 italic">Nenhuma pendente</span>`;
         } else {
             boxPend.innerHTML = chavesPend.map(c => `
                 <div onclick="abrirDetalhesComodo('${c}', 'Pendente')" class="flex justify-between items-center bg-[#090614] px-2 py-1 rounded border border-purple-900/60 hover:border-amber-500/60 cursor-pointer transition" title="Ver detalhes pendentes de ${c}">
