@@ -844,29 +844,214 @@ function atualizarDisplaysPonto() {
 
 function mudarVisaoPrincipal(visao) {
     visaoAtual = visao;
-    const btnFila = document.getElementById('btnVisaoFila');
-    const btnHist = document.getElementById('btnVisaoHistorico');
-    const secFila = document.getElementById('secaoFilaMissoes');
-    const secHist = document.getElementById('secaoHistoricoGeral');
-    const boxFiltrosFila = document.getElementById('filtrosFilaContainer');
-    const boxFiltrosHist = document.getElementById('filtrosHistoricoHeaderContainer');
+    const ativo = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md';
+    const inativo = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition';
+    const alvo = (id, mostrar) => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !mostrar); };
 
-    if (visao === 'fila') {
-        btnFila.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md';
-        btnHist.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition';
-        secFila.classList.remove('hidden');
-        secHist.classList.add('hidden');
-        if(boxFiltrosFila) boxFiltrosFila.classList.remove('hidden');
-        if(boxFiltrosHist) boxFiltrosHist.classList.add('hidden');
-        renderizarMissoes();
+    const btnF = document.getElementById('btnVisaoFila');
+    const btnH = document.getElementById('btnVisaoHistorico');
+    const btnT = document.getElementById('btnVisaoTrofeus');
+    if (btnF) btnF.className = visao === 'fila' ? ativo : inativo;
+    if (btnH) btnH.className = visao === 'historico' ? ativo : inativo;
+    if (btnT) btnT.className = visao === 'trofeus'
+        ? 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-amber-500 text-slate-950 font-bold transition shadow-md'
+        : 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-amber-500 transition';
+
+    alvo('secaoFilaMissoes', visao === 'fila');
+    alvo('secaoHistoricoGeral', visao === 'historico');
+    alvo('secaoTrofeus', visao === 'trofeus');
+    alvo('filtrosFilaContainer', visao === 'fila');
+    alvo('filtrosHistoricoHeaderContainer', visao === 'historico');
+    alvo('filtrosTrofeusHeaderContainer', visao === 'trofeus');
+
+    if (visao === 'fila') renderizarMissoes();
+    else if (visao === 'historico') renderizarHistoricoGeral();
+    else carregarTrofeus();
+}
+
+// =====================================================================
+// TROFEUS (CONQUISTAS) - estilo Steam. Dados vivem na aba "Conquistas".
+// =====================================================================
+let conquistas = [];
+let conquistasCarregadas = false;
+
+const ESTILO_RARIDADE = {
+    'Comum':    { borda: 'border-slate-500/50',   texto: 'text-slate-300',  barra: 'bg-slate-400',   brilho: '' },
+    'Raro':     { borda: 'border-sky-500/60',     texto: 'text-sky-300',    barra: 'bg-sky-400',     brilho: 'shadow-sky-500/10' },
+    'Épico':    { borda: 'border-purple-500/70',  texto: 'text-purple-300', barra: 'bg-purple-400',  brilho: 'shadow-purple-500/20' },
+    'Lendário': { borda: 'border-amber-400/80',   texto: 'text-amber-300',  barra: 'bg-amber-400',   brilho: 'shadow-amber-500/25' }
+};
+
+function escHtml(t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function carregarTrofeus() {
+    const lista = document.getElementById('listaTrofeusContainer');
+    if (lista && !conquistasCarregadas) {
+        lista.innerHTML = '<p class="text-xs text-purple-300/50 p-6 text-center col-span-full">Carregando troféus...</p>';
+    }
+    try {
+        const resp = await chamarAPI(API_URL + '?conquistas=1', { method: 'GET', redirect: 'follow' });
+        const json = await resp.json();
+        if (!json || json.status !== 'success') throw new Error((json && json.message) || 'Falha');
+        conquistas = json.conquistas || [];
+        conquistasCarregadas = true;
+        anunciarNovasConquistas(json.novas);
+    } catch (err) {
+        console.error('Erro ao carregar troféus:', err);
+        if (lista && !conquistasCarregadas) {
+            lista.innerHTML = '<p class="text-xs text-red-400 p-6 text-center col-span-full">Não foi possível carregar os troféus. Tente novamente.</p>';
+            return;
+        }
+    }
+    renderizarTrofeus();
+}
+
+function anunciarNovasConquistas(novas) {
+    (novas || []).forEach((c, i) => {
+        setTimeout(() => mostrarNotificacao('🏆 Conquista Desbloqueada!', `${c.icone || '🏆'} ${escHtml(c.titulo)} (${escHtml(c.raridade)})`, 'vitoria', 5000), i * 600);
+    });
+}
+
+function renderizarTrofeus() {
+    const lista = document.getElementById('listaTrofeusContainer');
+    const resumo = document.getElementById('resumoTrofeus');
+    if (!lista || !resumo) return;
+
+    const total = conquistas.length;
+    const feitas = conquistas.filter(c => c.status === 'Desbloqueada').length;
+    const pct = total > 0 ? Math.round((feitas / total) * 100) : 0;
+
+    resumo.innerHTML = `
+        <div class="bg-[#17112d] border border-amber-500/30 rounded-2xl p-4 space-y-2">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-trophy text-amber-300"></i>
+                    <span class="text-xs font-bold uppercase tracking-wider text-amber-300 font-mono-code">Seus Troféus</span>
+                </div>
+                <span class="text-xs font-mono-code text-white"><strong class="text-amber-300">${feitas}</strong> de ${total} desbloqueados • ${pct}%</span>
+            </div>
+            <div class="w-full h-2 bg-[#090614] rounded-full overflow-hidden border border-purple-900/50">
+                <div class="h-full bg-gradient-to-r from-amber-500 to-yellow-300 rounded-full transition-all duration-700" style="width:${pct}%"></div>
+            </div>
+        </div>`;
+
+    const filtro = (document.getElementById('filtroTrofeuStatus') || {}).value || 'TODAS';
+    const ordem = { 'Lendário': 0, 'Épico': 1, 'Raro': 2, 'Comum': 3 };
+    const visiveis = conquistas
+        .filter(c => filtro === 'TODAS' || c.status === filtro)
+        .sort((a, b) => (a.status === b.status ? 0 : (a.status === 'Desbloqueada' ? -1 : 1)) || ((ordem[a.raridade] ?? 4) - (ordem[b.raridade] ?? 4)));
+
+    if (visiveis.length === 0) {
+        lista.innerHTML = `<p class="text-xs text-purple-300/50 p-6 text-center col-span-full">${total === 0 ? 'Nenhuma conquista cadastrada ainda. Use "Nova Conquista".' : 'Nenhuma conquista neste filtro.'}</p>`;
+        return;
+    }
+
+    lista.innerHTML = visiveis.map(c => {
+        const est = ESTILO_RARIDADE[c.raridade] || ESTILO_RARIDADE['Comum'];
+        const ok = c.status === 'Desbloqueada';
+        const prog = Math.min(c.progresso, c.meta);
+        const pctC = Math.min(100, Math.round((prog / c.meta) * 100));
+        const falta = Math.max(0, c.meta - prog);
+        const fmt = n => (Math.round(n * 100) / 100).toString().replace('.', ',');
+        const unidade = c.tipoChave === 'tempo_economizado' ? ' min' : '';
+        const alvoTxt = c.filtro ? ` • ${escHtml(c.filtro)}` : '';
+
+        const rodape = ok
+            ? `<span class="text-emerald-400"><i class="fa-solid fa-circle-check mr-1"></i>Desbloqueada em ${escHtml(c.dataConquista || '—')}</span>`
+            : `<span class="text-purple-200/80">${fmt(prog)} / ${fmt(c.meta)}${unidade} • Faltam ${fmt(falta)}${unidade}</span>`;
+
+        return `
+            <div class="bg-[#17112d] border ${ok ? est.borda : 'border-purple-900/50'} rounded-2xl p-4 flex items-start space-x-3.5 shadow-lg ${ok ? est.brilho : ''} ${ok ? '' : 'opacity-70'}">
+                <div class="w-14 h-14 shrink-0 rounded-xl bg-[#231a42] border ${ok ? est.borda : 'border-purple-900/60'} flex items-center justify-center text-2xl ${ok ? '' : 'grayscale'} relative">
+                    ${escHtml(c.icone || '🏆')}
+                    ${ok ? '' : '<i class="fa-solid fa-lock absolute -bottom-1 -right-1 text-[10px] text-purple-300/80 bg-[#090614] rounded-full p-1 border border-purple-900/70"></i>'}
+                </div>
+                <div class="flex-grow min-w-0 space-y-1">
+                    <div class="flex items-center justify-between gap-2">
+                        <h4 class="font-bold text-sm text-white truncate">${escHtml(c.titulo)}</h4>
+                        <span class="text-[9px] font-mono-code uppercase tracking-wider ${est.texto} shrink-0">${escHtml(c.raridade)}</span>
+                    </div>
+                    <p class="text-[11px] text-purple-300/70 leading-snug">${escHtml(c.descricao || c.tipo)}${alvoTxt}</p>
+                    <div class="w-full h-1.5 bg-[#090614] rounded-full overflow-hidden border border-purple-900/50">
+                        <div class="h-full ${ok ? est.barra : 'bg-purple-500/70'} rounded-full transition-all duration-700" style="width:${ok ? 100 : pctC}%"></div>
+                    </div>
+                    <div class="text-[10px] font-mono-code">${rodape}</div>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function abrirModalNovaConquista() {
+    const modal = document.getElementById('modalNovaConquista');
+    if (!modal) return;
+    const dl = document.getElementById('conqListaFiltro');
+    if (dl) dl.innerHTML = COMODOS.map(c => `<option value="${escHtml(c)}"></option>`).join('');
+    document.getElementById('formNovaConquista').reset();
+    atualizarCampoFiltroConquista();
+    modal.classList.remove('hidden');
+}
+
+function fecharModalNovaConquista() {
+    const modal = document.getElementById('modalNovaConquista');
+    if (modal) modal.classList.add('hidden');
+}
+
+function atualizarCampoFiltroConquista() {
+    const tipo = document.getElementById('conqTipo').value;
+    const bloco = document.getElementById('conqBlocoFiltro');
+    const label = document.getElementById('conqLabelFiltro');
+    const campo = document.getElementById('conqFiltro');
+    const dl = document.getElementById('conqListaFiltro');
+    const precisa = tipo === 'Missões concluídas em um cômodo' || tipo === 'Vezes que concluiu uma tarefa';
+    bloco.classList.toggle('hidden', !precisa);
+    campo.required = precisa;
+    if (!precisa) { campo.value = ''; return; }
+    if (tipo === 'Missões concluídas em um cômodo') {
+        label.innerText = 'Cômodo';
+        dl.innerHTML = COMODOS.map(c => `<option value="${escHtml(c)}"></option>`).join('');
     } else {
-        btnHist.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md';
-        btnFila.className = 'px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition';
-        secHist.classList.remove('hidden');
-        secFila.classList.add('hidden');
-        if(boxFiltrosFila) boxFiltrosFila.classList.add('hidden');
-        if(boxFiltrosHist) boxFiltrosHist.classList.remove('hidden');
-        renderizarHistoricoGeral();
+        label.innerText = 'Título da tarefa (igual ao da missão)';
+        const titulos = Array.from(new Set((catalogoMissoes || []).map(m => m.titulo).filter(Boolean)));
+        dl.innerHTML = titulos.map(t => `<option value="${escHtml(t)}"></option>`).join('');
+    }
+}
+
+async function cadastrarConquista(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btnSalvarConquista');
+    if (btn) btn.disabled = true;
+    try {
+        const resp = await chamarAPI(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                acao: 'adicionarConquista',
+                icone: document.getElementById('conqIcone').value,
+                titulo: document.getElementById('conqTitulo').value,
+                descricao: document.getElementById('conqDescricao').value,
+                raridade: document.getElementById('conqRaridade').value,
+                tipoMeta: document.getElementById('conqTipo').value,
+                filtro: document.getElementById('conqFiltro').value,
+                meta: document.getElementById('conqMeta').value
+            })
+        });
+        const json = await resp.json();
+        if (!json || json.status !== 'success') {
+            mostrarNotificacao('Atenção', (json && json.message) || 'Não foi possível cadastrar.', 'aviso', 3500);
+            return;
+        }
+        conquistas = json.conquistas || conquistas;
+        conquistasCarregadas = true;
+        fecharModalNovaConquista();
+        renderizarTrofeus();
+        mostrarNotificacao('Sucesso', 'Conquista cadastrada.', 'sucesso', 2000);
+        anunciarNovasConquistas(json.novas);
+    } catch (err) {
+        console.error('Erro ao cadastrar conquista:', err);
+        mostrarNotificacao('Erro', 'Falha ao cadastrar a conquista.', 'aviso', 3500);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -1257,7 +1442,7 @@ function concluirMissao(id) {
         horaInicio: horaInicioExata,
         horaExata: horaTerminoExata,
         tempoEst: missao.tempoEstimado
-    });
+    }).then(() => verificarConquistasEmSegundoPlano());
 }
 
 function alternarNaoFazerHoje(id) {
@@ -1298,10 +1483,24 @@ function getIconeComodo(comodo) {
     }
 }
 
+// Reavalia as conquistas depois de concluir uma missao e avisa se alguma foi desbloqueada.
+async function verificarConquistasEmSegundoPlano() {
+    try {
+        const resp = await chamarAPI(API_URL + '?conquistas=1', { method: 'GET', redirect: 'follow' });
+        const json = await resp.json();
+        if (json && json.status === 'success') {
+            conquistas = json.conquistas || conquistas;
+            conquistasCarregadas = true;
+            anunciarNovasConquistas(json.novas);
+            if (visaoAtual === 'trofeus') renderizarTrofeus();
+        }
+    } catch (e) { /* silencioso: nao atrapalha o fluxo da missao */ }
+}
+
 function renderizarVisaoAtual() {
     if (visaoAtual === 'fila') {
         renderizarMissoes();
-    } else {
+    } else if (visaoAtual === 'historico') {
         renderizarHistoricoGeral();
     }
     atualizarEstatisticasGerais();
