@@ -122,3 +122,21 @@ body > header, body > main { position: relative; z-index: 2; }
 /* O fundo animado fica sempre atras de tudo */
 #fundoFolga { z-index: 0 !important; }
 #fundoFolga .particula-folga { opacity: 0.35; }
+
+/* Card de Dia Zerado (estilo jogo) */
+@keyframes trofeuFlutuar {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-5px) scale(1.04); }
+}
+.trofeu-flutuar {
+    animation: trofeuFlutuar 2.6s ease-in-out infinite;
+}
+.card-vitoria-dia {
+    box-shadow: 0 0 28px rgba(251, 191, 36, 0.12), inset 0 0 24px rgba(168, 85, 247, 0.08);
+}
+.vitoria-brilho {
+    position: absolute;
+    inset: -40%;
+    background: radial-gradient(circle at 50% 25%, rgba(251, 191, 36, 0.14), transparent 55%);
+    pointer-events: none;
+}
