@@ -160,24 +160,24 @@
 
         <div class="flex-grow flex flex-col space-y-3 overflow-hidden bg-[#17112d]/40 border border-purple-900/40 p-4 rounded-2xl">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-3 shrink-0">
-                <div class="flex space-x-2">
+                <div class="flex space-x-2 whitespace-nowrap">
                     <button onclick="mudarVisaoPrincipal('fila')" id="btnVisaoFila" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 text-white font-bold transition shadow-md">
-                        <i class="fa-solid fa-list-check mr-1.5"></i> Fila de Missões
+                        <i class="fa-solid fa-list-check mr-1.5"></i> Missões
                     </button>
                     <button onclick="mudarVisaoPrincipal('historico')" id="btnVisaoHistorico" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-purple-500 transition">
-                        <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Histórico Geral
+                        <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Histórico
                     </button>
                     <button onclick="mudarVisaoPrincipal('trofeus')" id="btnVisaoTrofeus" class="px-3.5 py-1.5 rounded-xl text-xs font-mono-code bg-[#17112d] text-purple-300 border border-purple-900/60 hover:border-amber-500 transition">
                         <i class="fa-solid fa-trophy mr-1.5"></i> Troféus
                     </button>
                 </div>
 
-                <div id="filtrosFilaContainer" class="flex items-center space-x-2">
+                <div id="filtrosFilaContainer" class="flex items-center space-x-2 whitespace-nowrap">
                     <select id="filtroFilaComodo" onchange="renderizarMissoes()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
-                        <option value="TODOS">Todos os Cômodos</option>
+                        <option value="TODOS">Cômodos</option>
                     </select>
                     <select id="filtroFilaPrioridade" onchange="renderizarMissoes()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
-                        <option value="TODOS">Todas Prioridades</option>
+                        <option value="TODOS">Prioridade</option>
                         <option value="Alta">Alta</option>
                         <option value="Média">Média</option>
                         <option value="Baixa">Baixa</option>
@@ -188,7 +188,7 @@
                     </button>
                     <button onclick="abrirModalDuplicarRapido()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-purple-900/40 text-purple-300 border border-purple-800/60 transition flex items-center space-x-1.5" title="Repetir missão hoje">
                         <i class="fa-solid fa-clone text-purple-400"></i>
-                        <span>Repetir Missão</span>
+                        <span>Repetir</span>
                     </button>
                     <button onclick="abrirModalGerenciarLinhas()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-[#231a42] hover:bg-red-900/30 text-red-300 border border-red-900/60 transition flex items-center space-x-1.5" title="Ver e excluir linhas da planilha">
                         <i class="fa-solid fa-table-list text-red-400"></i>
@@ -196,11 +196,11 @@
                     </button>
                     <button onclick="abrirModalNovaMissao()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-purple-600 hover:bg-purple-500 text-white transition flex items-center space-x-1.5 shadow-md" title="Adicionar nova missão">
                         <i class="fa-solid fa-plus"></i>
-                        <span>Adicionar Missão</span>
+                        <span>Missão</span>
                     </button>
                 </div>
 
-                <div id="filtrosTrofeusHeaderContainer" class="hidden flex items-center space-x-2">
+                <div id="filtrosTrofeusHeaderContainer" class="hidden flex items-center space-x-2 whitespace-nowrap">
                     <select id="filtroTrofeuStatus" onchange="renderizarTrofeus()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
                         <option value="TODAS">Todas</option>
                         <option value="Desbloqueada">Desbloqueadas</option>
@@ -208,16 +208,16 @@
                     </select>
                     <button onclick="abrirModalNovaConquista()" class="px-3 py-1.5 rounded-xl text-xs font-mono-code bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition flex items-center space-x-1.5 shadow-md">
                         <i class="fa-solid fa-plus"></i>
-                        <span>Nova Conquista</span>
+                        <span>Conquista</span>
                     </button>
                 </div>
 
                 <div id="filtrosHistoricoHeaderContainer" class="hidden flex items-center space-x-2">
                     <select id="filtroHistoricoComodo" onchange="renderizarHistoricoGeral()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
-                        <option value="TODOS">Todos os Cômodos</option>
+                        <option value="TODOS">Cômodos</option>
                     </select>
                     <select id="filtroHistoricoStatus" onchange="renderizarHistoricoGeral()" class="bg-[#090614] border border-purple-900/80 rounded-xl px-2.5 py-1 text-xs text-white">
-                        <option value="TODOS">Todos os Status</option>
+                        <option value="TODOS">Status</option>
                         <option value="Concluído">Concluído</option>
                         <option value="Pendente">Pendente</option>
                         <option value="Cancelado">Cancelado</option>
