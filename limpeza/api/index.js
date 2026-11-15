@@ -517,7 +517,9 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
     let currentId = maxId + 1;
 
     // Controlar para garantir que missões repetidas no mesmo dia sejam únicas na aba Progresso Diário
-    const titulosAdicionadosHoje = new Set(missoesHojeNaPlanilha.map(r => String(r[pColMap["Título da Missão"]] || "").trim().toLowerCase()));
+    // Chave = titulo + comodo (mesma missao em comodos diferentes e missao diferente).
+    const chaveMissao = (t, c) => String(t || "").trim().toLowerCase() + "|" + String(c || "").trim().toLowerCase();
+    const titulosAdicionadosHoje = new Set(missoesHojeNaPlanilha.map(r => chaveMissao(r[pColMap["Título da Missão"]], r[pColMap["Cômodo"]])));
 
     mParsed.dataRows.forEach(mRow => {
       let titulo = mRow[mColMap["Título da Missão"]] || "";
@@ -527,7 +529,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       let frequenciaDias = parseInt(mRow[mColMap["Frequência (Dias)"]] || 1, 10) || 1;
 
       if (titulo) {
-        const tituloLower = String(titulo).trim().toLowerCase();
+        const tituloLower = chaveMissao(titulo, comodo);
         if (!titulosAdicionadosHoje.has(tituloLower)) {
           // A PLANILHA CALCULA, O CODIGO APENAS LE.
           // Coluna I (Ultima), J (Proxima) e F (Tempo Medio) sao formulas (MAP/FILTER/LAMBDA).
