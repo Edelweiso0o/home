@@ -1,0 +1,253 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+body {
+  background-color: #2e1f0e;
+  font-family: 'Press Start 2P', cursive, sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  color: #5c2c16;
+  margin: 0;
+}
+
+.stardew-container {
+  background-color: #ffebad;
+  border: 6px solid #b15d26;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 4px #f4a261, 0 8px 16px rgba(0,0,0,0.6);
+  padding: 20px;
+  width: 100%;
+  max-width: 850px;
+}
+
+h1 {
+  font-size: 13px;
+  text-align: center;
+  color: #722f10;
+  text-shadow: 1px 1px #ffda79;
+  margin-bottom: 16px;
+}
+
+h2 {
+  font-size: 10px;
+  color: #722f10;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.panel-box {
+  background: #fff8e7;
+  border: 3px solid #b15d26;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 130px;
+}
+
+label {
+  font-size: 7px;
+  color: #722f10;
+}
+
+select, input {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 8px;
+  padding: 7px;
+  border: 3px solid #b15d26;
+  border-radius: 4px;
+  background-color: #fff;
+  outline: none;
+  color: #333;
+}
+
+.btn-abrir {
+  width: 100%;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 8px;
+  padding: 10px;
+  background-color: #d97706;
+  color: #fff;
+  border: 2px solid #92400e;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.btn-abrir:hover {
+  background-color: #b45309;
+}
+
+.oculto {
+  display: none !important;
+}
+
+.checklist-wrapper {
+  background: #fce399;
+  border: 2px solid #b15d26;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.checklist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 7px;
+  margin-bottom: 8px;
+}
+
+.checklist-header button {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 6px;
+  padding: 4px 6px;
+  background: #fff;
+  border: 2px solid #b15d26;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  padding: 8px;
+  border: 2px solid #d4a373;
+  border-radius: 4px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 8px;
+}
+
+.checklist-item input {
+  width: 14px;
+  height: 14px;
+  accent-color: #61a84f;
+  cursor: pointer;
+}
+
+.btn-salvar-lote {
+  width: 100%;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 9px;
+  padding: 10px;
+  background-color: #61a84f;
+  color: #fff;
+  border: 3px solid #2d5a27;
+  border-radius: 6px;
+  cursor: pointer;
+  text-shadow: 1px 1px #1e3d1a;
+}
+
+.btn-salvar-lote:hover {
+  background-color: #4e8a3f;
+}
+
+#statusMsg {
+  font-size: 8px;
+  text-align: center;
+  margin-top: 6px;
+}
+
+.tabela-registros {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 2px solid #b15d26;
+  background: #fff;
+  border-radius: 4px;
+  padding: 6px;
+}
+
+.registro-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 6px;
+  border-bottom: 1px dashed #d4a373;
+  font-size: 7px;
+}
+
+/* SISTEMA DE ABAS E PROGRESSO */
+.tabs-container {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 15px;
+  border-bottom: 3px solid #b15d26;
+  padding-bottom: 8px;
+}
+
+.tab-btn {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 7px;
+  padding: 8px 10px;
+  background-color: #e6ccb2;
+  color: #5c2c16;
+  border: 2px solid #b15d26;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  background-color: #fff8e7;
+  color: #722f10;
+  font-weight: bold;
+  padding-top: 10px;
+  border-top: 3px solid #61a84f;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.progresso-barra {
+  background: #d4a373;
+  border: 2px solid #b15d26;
+  border-radius: 4px;
+  height: 14px;
+  width: 100%;
+  margin-bottom: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progresso-fill {
+  background-color: #61a84f;
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.progresso-texto {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  font-size: 6px;
+  color: #fff;
+  text-shadow: 1px 1px #000;
+  line-height: 12px;
+}
