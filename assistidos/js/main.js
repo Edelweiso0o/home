@@ -8,6 +8,7 @@
    ============================================================ */
 (function () {
     'use strict';
+    window.__assistidos_v = '0.2.0';
 
     // ---- CHAVE DE ACESSO DA API (usada quando o backend entrar) ----
     var API_URL = '/api';
