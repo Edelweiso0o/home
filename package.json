@@ -1,0 +1,9 @@
+{
+  "name": "home-central-de-projetos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Central de Projetos: home que agrega os modulos web (limpeza, controle-gastos, stardew-valley, assistidos).",
+  "dependencies": {
+    "googleapis": "^126.0.0"
+  }
+}
