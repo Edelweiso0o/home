@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Central de Tarefas v2.1.0 - RPG Dashboard</title>
+    <title>CleanQuest HQ</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧹</text></svg>">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -39,10 +39,10 @@
                 </div>
                 <div>
                     <div class="flex items-center space-x-2">
-                        <h1 class="text-base font-black uppercase tracking-wider text-white">Central de <span class="text-purple-400">Tarefas</span></h1>
-                        <span class="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono-code">v2.1.0</span>
+                        <h1 class="text-base font-black uppercase tracking-wider text-white">CleanQuest <span class="text-purple-400">HQ</span></h1>
+                        <span class="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold px-2 py-0.5 rounded-md font-mono-code">v2.5.0</span>
                     </div>
-                    <p class="text-[11px] text-purple-300/70 font-mono-code">Gerenciador de Limpeza Doméstica</p>
+                    <p class="text-[11px] text-purple-300/70 font-mono-code">Missões da casa · ponto · descanso</p>
                 </div>
             </div>
             
@@ -107,6 +107,7 @@
                             <div>Início <span class="text-white font-bold" id="statInicioTurno">--:--</span></div>
                             <div>Previsto <span class="text-indigo-300 font-bold" id="statPrevistoConcluidas">0 min</span></div>
                             <div>Real <span class="text-emerald-300 font-bold" id="statRealConcluidas">0 min</span></div>
+                            <div>Ocioso <span class="font-bold text-rose-300" id="statOcioso">--:--:--</span> <span id="statOciosoPausa" class="text-slate-500"></span></div>
                         </div>
                     </div>
                     <div class="border-l border-purple-900/50 pl-3">
@@ -549,6 +550,6 @@
         </div>
     </div>
 
-    <script src="js/main.js?v=2.4.0"></script>
+    <script src="js/main.js?v=2.5.0"></script>
 </body>
 </html>
