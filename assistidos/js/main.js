@@ -27,7 +27,7 @@
     var API_URL = '/api/assistidos';
 
     var CHAVE_STORAGE = 'assistidos.itens.v1';
-    var ROTULOS_TIPO = { filme: 'Filme', serie: 'Série', anime: 'Anime', dorama: 'Dorama', documentario: 'Documentário' };
+    var ROTULOS_TIPO = { filme: 'Filme', serie: 'Série', anime: 'Anime', desenho: 'Desenho', novela: 'Novela', documentario: 'Documentário' };
     var ROTULOS_STATUS = { assistindo: 'Assistindo', completo: 'Completo', pausado: 'Pausado', largado: 'Largado', quero_ver: 'Quero ver' };
 
 
@@ -166,6 +166,7 @@
             tituloOriginal: o.tituloOriginal || '',
             ano: o.ano,
             horas: o.horas || 0,
+            minutos: o.minutos || 0,
             episodios: o.episodios || [],
             criadoEm: o.criadoEm || '',
             atualizadoEm: o.atualizadoEm || ''
@@ -394,7 +395,9 @@
 
         var progressoHTML = '';
 
-        if (item.temTotal === false && atual > 0) {
+        if (item.tipo === 'filme') {
+            progressoHTML = '';
+        } else if (item.temTotal === false && atual > 0) {
             // Total ainda nao informado: sem barra e sem porcentagem (nao da para calcular).
             progressoHTML =
                 '<div class="progresso">' +
@@ -449,6 +452,10 @@
 
 
 
+        var mins = parseInt(item.minutos, 10) || 0;
+        var tempoHTML = mins > 0
+            ? '<span class="tag tag-tempo" title="Tempo assistido"><i class="fa-solid fa-clock"></i> ' + (mins >= 60 ? Math.floor(mins / 60) + 'h' + (mins % 60 ? String(mins % 60).padStart(2, '0') : '') : mins + 'min') + '</span>'
+            : '';
         var ondeHTML = item.onde
 
             ? '<span><i class="fa-solid fa-tv"></i> ' + escaparHTML(item.onde) + '</span>'
@@ -480,6 +487,7 @@
                     '<span class="tag status-' + escaparHTML(item.status) + '">' + escaparHTML(ROTULOS_STATUS[item.status] || item.status) + '</span>' +
 
                     tempHTML +
+                    tempoHTML +
 
                 '</div>' +
 
