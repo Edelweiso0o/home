@@ -881,26 +881,6 @@
 
 
 
-    // Aviso de esqueleto: fecha e lembra a escolha
-
-    var elAviso = document.getElementById('avisoEsqueleto');
-
-    if (localStorage.getItem('assistidos.avisoFechado') === '1') {
-
-        elAviso.hidden = true;
-
-    }
-
-    document.getElementById('btnFecharAviso').addEventListener('click', function () {
-
-        elAviso.hidden = true;
-
-        localStorage.setItem('assistidos.avisoFechado', '1');
-
-    });
-
-
-
     window.confirmarChaveAcesso = confirmarChaveAcesso;
 
     // ---- Início ----
