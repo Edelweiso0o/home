@@ -885,10 +885,14 @@
 
 
     // ---- Início ----
+    // O modal da senha abre primeiro: sem a chave a API recusa tudo (401).
+    // console.log para confirmar no navegador que este trecho roda.
+    console.log('[assistidos] inicio; modal presente:', !!document.getElementById('modalChaveAcesso'));
 
     render();
+    abrirModalChave();
 
-    carregar();
+    if (obterChaveAPI()) carregar();
 })();
 
 
