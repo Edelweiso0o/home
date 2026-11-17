@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/api/assistidos",
-      "destination": "/assistidos/api/index.js"
+      "destination": "/api/assistidos.js"
     },
     {
       "source": "/api/assistidos/(.*)",
-      "destination": "/assistidos/api/index.js"
+      "destination": "/api/assistidos.js"
     },
     {
       "source": "/api",
