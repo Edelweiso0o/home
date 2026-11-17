@@ -95,17 +95,34 @@
             if (erro) { erro.textContent = 'Digite a senha.'; erro.hidden = false; }
             return;
         }
-        salvarChaveAPI(chave);
+        if (erro) { erro.hidden = true; }
+        var botao = document.querySelector('#formChaveAcesso button[type="submit"]');
+        if (botao) { botao.disabled = true; botao.textContent = 'Entrando...'; }
+        function firmar() {
+            if (botao) { botao.disabled = false; botao.textContent = 'Entrar'; }
+        }
+        function falhar(msg) {
+            firmar();
+            salvarChaveAPI('');
+            if (erro) { erro.textContent = msg; erro.hidden = false; }
+        }
         fetch(API_URL, { method: 'GET', headers: { 'X-Api-Key': chave } }).then(function (r) {
-            if (r.status === 401) {
-                if (erro) { erro.textContent = 'Senha incorreta. Tente de novo.'; erro.hidden = false; }
-                salvarChaveAPI('');
-                return;
-            }
+            return r.text().then(function (corpo) {
+                return { status: r.status, corpo: corpo };
+            });
+        }).then(function (res) {
+            if (res.status === 401) return falhar('Senha incorreta. Tente de novo.');
+            if (res.status >= 400) return falhar('Erro ' + res.status + ': ' + res.corpo.slice(0, 140));
+            var dados;
+            try { dados = JSON.parse(res.corpo); } catch (e) { return falhar('Resposta invalida do servidor.'); }
+            if (dados && dados.status === 'error') return falhar('API: ' + (dados.message || 'erro desconhecido'));
+            salvarChaveAPI(chave);
+            if (dados && dados.obras) { cacheLocal(dados.obras); }
+            firmar();
             fecharModalChave();
             carregar();
-        }).catch(function () {
-            if (erro) { erro.textContent = 'Sem conexao. Tente de novo.'; erro.hidden = false; }
+        }).catch(function (e) {
+            falhar('Sem conexao: ' + (e && e.message ? e.message : 'falhou'));
         });
     }
 
@@ -883,6 +900,8 @@
     });
 
 
+
+    window.confirmarChaveAcesso = confirmarChaveAcesso;
 
     // ---- Início ----
     // O modal da senha abre primeiro: sem a chave a API recusa tudo (401).
