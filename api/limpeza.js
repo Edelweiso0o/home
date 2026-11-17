@@ -318,7 +318,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 // A configuracao mora na aba "Configuracoes" (linha 2 = cabecalho, coluna B = chave, C = valor).
 // A contagem de dias trabalhados vem do "Registro de Ponto": 1 turno por dia conta 1 dia.
 const ABA_CONFIG = "Configurações";
-const CONFIG_PADRAO = { diasParaFolga: 9 };
+const CONFIG_PADRAO = { diasParaFolga: 9, toleranciaCancelamentos: 3 };
 
 async function lerConfiguracoes(sheets, spreadsheetId) {
   try {
@@ -333,6 +333,8 @@ async function lerConfiguracoes(sheets, spreadsheetId) {
     }
     cfg.diasParaFolga = parseInt(cfg.diasParaFolga, 10) || CONFIG_PADRAO.diasParaFolga;
     if (cfg.diasParaFolga < 1) cfg.diasParaFolga = CONFIG_PADRAO.diasParaFolga;
+    const tol = parseInt(cfg.toleranciaCancelamentos, 10);
+    cfg.toleranciaCancelamentos = Number.isFinite(tol) && tol >= 0 ? tol : CONFIG_PADRAO.toleranciaCancelamentos;
     return cfg;
   } catch (e) {
     console.error("[lerConfiguracoes] ERRO:", e && e.message);
@@ -389,7 +391,8 @@ async function salvarConfiguracoes(sheets, spreadsheetId, patch) {
 //   3) a contagem e em SEQUENCIA: no primeiro dia invalido a contagem para e
 //      vale o que foi acumulado antes dele. Um buraco depois nao apaga o passado,
 //      mas os dias apos o buraco nao somam.
-function contarDiasTrabalhados(turnos, referenciaStr, progresso) {
+function contarDiasTrabalhados(turnos, referenciaStr, progresso, tolerancia) {
+  if (tolerancia === undefined) tolerancia = CONFIG_PADRAO.toleranciaCancelamentos;
   const refMs = referenciaStr ? parseDataPtBrParaMs(referenciaStr) : 0;
 
   // dias com turno (apos a ultima folga)
@@ -402,7 +405,7 @@ function contarDiasTrabalhados(turnos, referenciaStr, progresso) {
     if (refMs && ms <= refMs) return;
     diasComTurno.set(dataNorm, ms);
   });
-  if (diasComTurno.size === 0) return 0;
+  if (diasComTurno.size === 0) return { validos: 0, comCancelamento: 0 };
 
   // status das missoes por dia
   const missoesPorDia = new Map(); // data -> { total, concluidas }
@@ -414,9 +417,10 @@ function contarDiasTrabalhados(turnos, referenciaStr, progresso) {
     if (refMs && ms <= refMs) return;
     if (!diasComTurno.has(dataNorm)) return;
     const st = normalizarStatusMissao(pRow.status);
-    const reg = missoesPorDia.get(dataNorm) || { total: 0, concluidas: 0 };
+    const reg = missoesPorDia.get(dataNorm) || { total: 0, concluidas: 0, canceladas: 0 };
     reg.total += 1;
     if (st === 'Concluído') reg.concluidas += 1;
+    if (st === 'Cancelado') reg.canceladas += 1;
     missoesPorDia.set(dataNorm, reg);
   });
 
@@ -425,14 +429,19 @@ function contarDiasTrabalhados(turnos, referenciaStr, progresso) {
     .sort((a, b) => a[1] - b[1]);
 
   // conta em sequencia até o primeiro dia que reprova
+  // Tolerancia: ate N missoes "nao fazer hoje" (Cancelado) por dia; todas as
+  // demais precisam estar concluidas (e ao menos uma concluida).
   let validos = 0;
+  let comCancelamento = 0;
   for (const [dataStr] of ordenados) {
     const reg = missoesPorDia.get(dataStr);
-    const diaValido = !!reg && reg.total > 0 && reg.concluidas === reg.total;
+    const diaValido = !!reg && reg.total > 0 && reg.concluidas > 0 &&
+      reg.canceladas <= tolerancia && (reg.concluidas + reg.canceladas) === reg.total;
     if (!diaValido) break;
     validos += 1;
+    if (reg.canceladas > 0) comCancelamento += 1;
   }
-  return validos;
+  return { validos, comCancelamento };
 }
 
 // Devolve o estado do ciclo de folga para hoje.
@@ -442,7 +451,10 @@ function calcularCicloFolga(cfg, turnos, hojeStr, progresso) {
   const ultimaFolga = cfg.ultimaFolga ? normalizarData(cfg.ultimaFolga) : "";
 
   const trabalhouHoje = (turnos || []).some(t => normalizarData(t.data) === hojeStr);
-  const diasTrabalhados = contarDiasTrabalhados(turnos, ultimaFolga, progresso);
+  const tolerancia = Number.isFinite(parseInt(cfg.toleranciaCancelamentos, 10)) ? parseInt(cfg.toleranciaCancelamentos, 10) : CONFIG_PADRAO.toleranciaCancelamentos;
+  const contagem = contarDiasTrabalhados(turnos, ultimaFolga, progresso, tolerancia);
+  const diasTrabalhados = contagem.validos;
+  const canceladasHoje = (progresso || []).filter(r => normalizarData(r.data) === hojeStr && normalizarStatusMissao(r.status) === 'Cancelado').length;
 
   // "pularFolgaAte": se voce decidiu trabalhar no dia de folga, a folga
   // e empurrada para depois dessa data.
@@ -463,6 +475,9 @@ function calcularCicloFolga(cfg, turnos, hojeStr, progresso) {
   return {
     diasParaFolga: diasParaFolga,
     diasTrabalhados: diasTrabalhados,
+    diasComCancelamento: contagem.comCancelamento,
+    toleranciaCancelamentos: tolerancia,
+    canceladasHoje: canceladasHoje,
     faltam: faltam,
     cicloCheio: cicloCheio,
     modoTeste: modoTeste,
