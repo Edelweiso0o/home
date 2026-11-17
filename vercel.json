@@ -3,6 +3,14 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/api/assistidos",
+      "destination": "/assistidos/api/index.js"
+    },
+    {
+      "source": "/api/assistidos/(.*)",
+      "destination": "/assistidos/api/index.js"
+    },
+    {
       "source": "/api",
       "destination": "/api/index.js"
     },
