@@ -181,6 +181,7 @@ function processarCicloSegundo() {
     });
 
     atualizarDisplaysPonto();
+    atualizarOcioso();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -599,6 +600,15 @@ async function confirmarChaveAcesso() {
         return;
     }
 
+    const botao = document.querySelector('#formChaveAcesso button[type="submit"]');
+    const rotuloBotao = botao ? botao.innerHTML : '';
+    const liberarBotao = () => { if (botao) { botao.disabled = false; botao.innerHTML = rotuloBotao; } };
+    if (botao) {
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Entrando...';
+    }
+    if (erro) erro.classList.add('hidden');
+
     salvarChaveAPI(chave);
     if (usuario) localStorage.setItem('cq_usuario', usuario);
 
@@ -606,14 +616,17 @@ async function confirmarChaveAcesso() {
     try {
         const resp = await fetch(API_URL, { method: 'GET', headers: cabecalhosAPI(false), redirect: 'follow' });
         if (resp.status === 401) {
+            liberarBotao();
             if (erro) { erro.textContent = 'Chave incorreta. Tente de novo.'; erro.classList.remove('hidden'); }
             return;
         }
     } catch (e) {
+        liberarBotao();
         if (erro) { erro.textContent = 'Sem conexão. Tente de novo.'; erro.classList.remove('hidden'); }
         return;
     }
 
+    liberarBotao();
     modal.classList.add('hidden');
     mostrarNotificacao("Sucesso", "Acesso liberado.", "sucesso", 2000);
     carregarDadosDoServidor(true);
@@ -1410,6 +1423,7 @@ function concluirMissao(id) {
     if (missao.tempoInicioMs) {
         const diffMin = Math.round((dataAtual.getTime() - missao.tempoInicioMs) / 60000);
         missao.tempoRealMin = diffMin > 0 ? diffMin : 1;
+        missao.duracaoSeg = Math.max(1, Math.round((dataAtual.getTime() - missao.tempoInicioMs) / 1000));
     } else {
         missao.tempoRealMin = missao.tempoEstimado;
     }
@@ -1615,11 +1629,11 @@ function renderizarMissoes() {
                         </div>
                         <div class="bg-[#090614]/80 border border-amber-500/30 rounded-xl px-3 py-2">
                             <div class="text-[10px] text-purple-300/60 uppercase">Tempo Ganho</div>
-                            <div class="text-sm font-black text-amber-300">+${tempoGanhoMin}m</div>
+                            <div class="text-sm font-black text-amber-300">+${fmtMin(tempoGanhoMin)}</div>
                         </div>
                         <div class="bg-[#090614]/80 border border-purple-500/30 rounded-xl px-3 py-2">
                             <div class="text-[10px] text-purple-300/60 uppercase">Tempo Ativo</div>
-                            <div class="text-sm font-black text-purple-200">${tempoTotalMin}m</div>
+                            <div class="text-sm font-black text-purple-200">${fmtMin(tempoTotalMin)}</div>
                         </div>
                     </div>
                     <div class="relative flex justify-center gap-2 pt-1">
@@ -1881,6 +1895,47 @@ function tempoRealDaMissao(m) {
     const fim = hmsParaSeg(m['Hora de Término'] || m.horaFim);
     if (ini !== null && fim !== null && fim > ini) return Math.max(1, Math.round((fim - ini) / 60));
     return parseFloat(m.tempoEstimado) || 0;
+}
+
+// Duracao em segundos de uma missao concluida (precisao de segundos quando possivel).
+function duracaoSegDaMissao(m) {
+    if (m.duracaoSeg) return m.duracaoSeg;
+    const ini = hmsParaSeg(m['Hora de Início'] || m.horaInicio);
+    const fim = hmsParaSeg(m['Hora de Término'] || m.horaFim);
+    if (ini !== null && fim !== null && fim > ini) return fim - ini;
+    return Math.round(tempoRealDaMissao(m) * 60);
+}
+
+function fmtHMS(seg) {
+    seg = Math.max(0, Math.floor(seg || 0));
+    return String(Math.floor(seg / 3600)).padStart(2, '0') + ':' + String(Math.floor((seg % 3600) / 60)).padStart(2, '0') + ':' + String(seg % 60).padStart(2, '0');
+}
+
+// Tempo ocioso do turno = tempo de turno - tempo dentro de missoes.
+// Conta em tempo real; pausa enquanto ha missao em andamento.
+function atualizarOcioso() {
+    const el = document.getElementById('statOcioso');
+    if (!el) return;
+    if (!estadoPonto.trabalhando || !estadoPonto.inicioTurnoMs) { el.innerText = '--:--:--'; return; }
+    const agora = Date.now();
+    const hojeStr = obterDataHojeStr();
+    let emMissao = 0;
+    let rodando = false;
+    missoes.forEach(m => {
+        if (m.data && m.data !== hojeStr) return;
+        const st = (m.status || '').trim();
+        if (st === 'Concluído') {
+            emMissao += duracaoSegDaMissao(m);
+        } else if (m.estadoMissao === 'EmAndamento' && m.tempoInicioMs) {
+            emMissao += Math.floor((agora - Math.max(m.tempoInicioMs, estadoPonto.inicioTurnoMs)) / 1000);
+            rodando = true;
+        }
+    });
+    const ocioso = Math.floor((agora - estadoPonto.inicioTurnoMs) / 1000) - emMissao;
+    el.innerText = fmtHMS(ocioso);
+    el.className = 'font-bold ' + (rodando ? 'text-slate-400' : 'text-rose-300');
+    const rot = document.getElementById('statOciosoPausa');
+    if (rot) rot.innerText = rodando ? '(pausado)' : '';
 }
 
 function fmtMin(min) {
@@ -2249,8 +2304,8 @@ function atualizarPainelFolga() {
         const tol = c.toleranciaCancelamentos !== undefined ? c.toleranciaCancelamentos : 3;
         const hoje = c.canceladasHoje || 0;
         const comCanc = c.diasComCancelamento || 0;
-        elTol.innerHTML = 'Puladas hoje: <span class="' + (hoje > tol ? 'text-rose-400' : 'text-indigo-300') + ' font-bold">' + hoje + '/' + tol + '</span>' +
-            ' · dias perfeitos com pulos: <span class="text-indigo-300 font-bold">' + comCanc + '</span>';
+        elTol.innerHTML = 'Puladas hoje: <span class="' + (hoje > tol ? 'text-rose-400' : 'text-indigo-300') + ' font-bold">' + hoje + ' de ' + tol + '</span> permitidas' +
+            '<br>Dias perfeitos com missões puladas: <span class="text-indigo-300 font-bold">' + comCanc + '</span>';
     }
 
     const cfgDias = document.getElementById('cfgDiasTrabalhados');
