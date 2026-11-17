@@ -621,3 +621,82 @@ h1, h2, h3, h4 { margin: 0; }
     font-size: .78rem;
     font-style: italic;
 }
+
+/* ---- Modal da senha de acesso ---- */
+.modal-chave {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+}
+
+.modal-chave[hidden] { display: none; }
+
+.modal-chave form {
+    background: #17112d;
+    border: 1px solid #4b2d7f;
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.modal-chave h3 {
+    margin: 0 0 4px;
+    font-size: .95rem;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.modal-chave h3 i { color: #a855f7; margin-right: 6px; }
+
+.modal-chave p {
+    margin: 0;
+    font-size: .78rem;
+    color: #c4b5fd;
+}
+
+.modal-chave label {
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #a855f7;
+}
+
+.modal-chave input {
+    background: #090614;
+    border: 1px solid #4b2d7f;
+    border-radius: 10px;
+    padding: 9px 12px;
+    color: #fff;
+    font-size: .9rem;
+}
+
+.modal-chave input:focus {
+    outline: none;
+    border-color: #a855f7;
+}
+
+.modal-chave #erroChave { color: #f87171; }
+
+.modal-chave button {
+    background: #7c3aed;
+    border: 0;
+    border-radius: 10px;
+    padding: 10px;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+}
+
+.modal-chave button:hover { background: #9333ea; }

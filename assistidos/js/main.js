@@ -41,17 +41,71 @@
     // ---- Camada de dados: planilha Google via API (/api/assistidos) ----
     // Mesmo modelo do modulo limpeza. O localStorage guarda apenas o ultimo
     // estado bom, para a tela nao abrir vazia enquanto a rede responde.
-    var chaveApi = localStorage.getItem('assistidos.apiKey') || '';
+    // A chave NAO fica salva no navegador: vive so na memoria desta aba.
+    // Quem guarda a senha para preencher o formulario e o gerenciador de senhas.
+    var chaveEmMemoria = '';
+
+    function obterChaveAPI() { return chaveEmMemoria; }
+    function salvarChaveAPI(c) { chaveEmMemoria = String(c || '').trim(); }
 
     function reqAPI(metodo, corpo) {
-        var opcoes = { method: metodo, headers: { 'Content-Type': 'application/json' } };
-        if (chaveApi) opcoes.headers['X-Api-Key'] = chaveApi;
+        var opcoes = {
+            method: metodo,
+            headers: { 'Content-Type': 'application/json', 'X-Api-Key': obterChaveAPI() }
+        };
         if (corpo) opcoes.body = JSON.stringify(corpo);
         return fetch(API_URL, opcoes).then(function (r) {
+            if (r.status === 401) {
+                abrirModalChave('Sessao expirada ou senha incorreta. Entre novamente.');
+                throw new Error('NAO_AUTORIZADO');
+            }
             return r.json().then(function (j) {
                 if (!r.ok) throw new Error(j && j.message ? j.message : ('HTTP ' + r.status));
                 return j;
             });
+        });
+    }
+
+    // ---- Modal da chave de acesso (mesmo esquema do modulo limpeza) ----
+    function abrirModalChave(mensagem) {
+        var modal = document.getElementById('modalChaveAcesso');
+        if (!modal) return;
+        var msg = modal.querySelector('#chaveMensagem');
+        if (msg) msg.textContent = mensagem || 'Digite a senha para acessar o diario.';
+        var erro = modal.querySelector('#erroChave');
+        if (erro) erro.classList.add('hidden');
+        var senha = modal.querySelector('#inputChaveAcesso');
+        if (senha) senha.value = '';
+        modal.hidden = false;
+        setTimeout(function () { if (senha) senha.focus(); }, 80);
+    }
+
+    function fecharModalChave() {
+        var modal = document.getElementById('modalChaveAcesso');
+        if (modal) modal.hidden = true;
+    }
+
+    function confirmarChaveAcesso(evento) {
+        if (evento) evento.preventDefault();
+        var input = document.getElementById('inputChaveAcesso');
+        var erro = document.getElementById('erroChave');
+        if (!input) return;
+        var chave = input.value.trim();
+        if (!chave) {
+            if (erro) { erro.textContent = 'Digite a senha.'; erro.hidden = false; }
+            return;
+        }
+        salvarChaveAPI(chave);
+        fetch(API_URL, { method: 'GET', headers: { 'X-Api-Key': chave } }).then(function (r) {
+            if (r.status === 401) {
+                if (erro) { erro.textContent = 'Senha incorreta. Tente de novo.'; erro.hidden = false; }
+                salvarChaveAPI('');
+                return;
+            }
+            fecharModalChave();
+            carregar();
+        }).catch(function () {
+            if (erro) { erro.textContent = 'Sem conexao. Tente de novo.'; erro.hidden = false; }
         });
     }
 
@@ -115,12 +169,19 @@
         itens = lerCache();
         render();
 
+        // Sem a senha em memoria nao adianta chamar: pede primeiro.
+        if (!obterChaveAPI()) {
+            abrirModalChave();
+            return;
+        }
+
         reqAPI('GET').then(function (r) {
             itens = (r.obras || []).map(obraParaItem);
             cacheLocal(itens);
             render();
             if (r.resumo) atualizarResumo(r.resumo);
         }).catch(function (e) {
+            if (e.message === 'NAO_AUTORIZADO') return;
             console.warn('[assistidos] API indisponivel:', e.message);
             var el = document.getElementById('avisoOffline');
             if (el) {

@@ -200,5 +200,17 @@
     </div>
 
     <script src="js/main.js?v=0.1.1"></script>
+
+    <!-- Modal da senha de acesso (mesmo esquema do modulo limpeza) -->
+    <div id="modalChaveAcesso" class="modal-chave" hidden>
+        <form id="formChaveAcesso" onsubmit="confirmarChaveAcesso(event)">
+            <h3><i class="fa-solid fa-lock"></i> Entrar</h3>
+            <p id="chaveMensagem"></p>
+            <label for="inputChaveAcesso">Senha</label>
+            <input type="password" id="inputChaveAcesso" autocomplete="current-password" placeholder="sua senha">
+            <p id="erroChave" hidden></p>
+            <button type="submit">Entrar</button>
+        </form>
+    </div>
 </body>
 </html>
