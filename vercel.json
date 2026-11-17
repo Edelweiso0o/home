@@ -1,10 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install",
-  "rewrites": [
-    {
-      "source": "/api/assistidos",
-      "destination": "/assistidos/api/index.js"
-    }
-  ]
+  "installCommand": "npm install"
 }
