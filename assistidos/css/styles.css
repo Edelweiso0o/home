@@ -21,6 +21,8 @@
 
 * { box-sizing: border-box; }
 
+html { overflow-y: scroll; scrollbar-gutter: stable; }
+
 html, body {
     margin: 0;
     padding: 0;
@@ -601,20 +603,26 @@ h1, h2, h3, h4 { margin: 0; }
 
 /* ---- Resumo (obras / registros / horas) ---- */
 .resumo {
-    max-width: 1100px;
-    margin: 0 auto 18px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 18px;
+    max-width: 1200px;
+    margin: 0 auto 20px;
+    padding: 0 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
     font-size: .9rem;
-    opacity: .85;
 }
 
 .resumo span {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--card, #17112d);
+    border: 1px solid var(--border-forte, #4b2d7f);
+    border-radius: 12px;
 }
+
+.resumo span i { color: var(--acento, #a855f7); }
 
 .dica-total {
     opacity: .6;
