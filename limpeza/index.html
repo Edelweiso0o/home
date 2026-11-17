@@ -103,6 +103,11 @@
                         <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block" id="labelTurnoTitulo">Tempo em Turno</span>
                         <div class="text-xl font-black font-mono-code text-white mt-1" id="timerTurnoActual">00:00:00</div>
                         <span class="text-[10px] text-purple-300/50 font-mono-code">Término <span class="text-amber-300 font-bold" id="statPrevisaoTermino">--:--</span></span>
+                        <div class="mt-1.5 space-y-0.5 text-[10px] text-purple-300/50 font-mono-code">
+                            <div>Início <span class="text-white font-bold" id="statInicioTurno">--:--</span></div>
+                            <div>Previsto <span class="text-indigo-300 font-bold" id="statPrevistoConcluidas">0 min</span></div>
+                            <div>Real <span class="text-emerald-300 font-bold" id="statRealConcluidas">0 min</span></div>
+                        </div>
                     </div>
                     <div class="border-l border-purple-900/50 pl-3">
                         <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300/70 font-mono-code block">Tempo Ganho</span>
@@ -138,6 +143,7 @@
                 <div class="w-full h-1.5 bg-[#090614] rounded-full overflow-hidden border border-purple-900/50">
                     <div id="folgaBarra" class="h-full bg-gradient-to-r from-indigo-500 to-purple-400 rounded-full transition-all duration-700" style="width: 0%"></div>
                 </div>
+                <p class="text-[10px] text-purple-300/60 font-mono-code" id="folgaTolerancia">Puladas hoje: 0/3 · tolerância de 3 missões por dia</p>
             </div>
 
             <div class="bg-[#17112d] border border-amber-500/30 p-4 rounded-2xl space-y-2">
@@ -543,6 +549,6 @@
         </div>
     </div>
 
-    <script src="js/main.js?v=2.3.0"></script>
+    <script src="js/main.js?v=2.4.0"></script>
 </body>
 </html>
