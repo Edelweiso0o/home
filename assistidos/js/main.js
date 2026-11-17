@@ -274,7 +274,8 @@
 
 
 
-    var itens = carregar();
+    // carregar() e chamado no fim do arquivo, quando o DOM e os elementos ja existem
+    var itens = [];
 
     var filtros = { busca: '', tipo: '', status: '', nota: '' };
 
@@ -887,6 +888,7 @@
 
     render();
 
+    carregar();
 })();
 
 
