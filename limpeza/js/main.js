@@ -1430,8 +1430,11 @@ function concluirMissao(id) {
         return st !== 'Concluído' && st !== 'Cancelado';
     });
 
+    const resComodo = resumoComodoHoje(missao.comodo);
     if (!aindaPendentes) {
         mostrarNotificacao("🏆 Dia Zerado!", "Todas as missões de hoje foram cumpridas. Parabéns e bom descanso!", "vitoria", 4500);
+    } else if (resComodo.completo) {
+        mostrarNotificacao("🎉 Parabéns!", "Todas as tarefas de " + missao.comodo + " concluídas hoje!", "vitoria", 4000);
     } else {
         mostrarNotificacao("Missão Concluída!", "Tarefa finalizada com sucesso.", "sucesso", 2500);
     }
@@ -1531,6 +1534,33 @@ function renderizarMissoes() {
         if (aEmAndamento !== bEmAndamento) return aEmAndamento - bEmAndamento;
         return (pesoPrioridade[a.prioridade] || 2) - (pesoPrioridade[b.prioridade] || 2);
     });
+
+    if (missoesAtivas.length === 0 && fComodo !== 'TODOS' && resumoComodoHoje(fComodo).completo) {
+        const rc = resumoComodoHoje(fComodo);
+        const ganho = rc.prev - rc.real;
+        const ganhoTxt = ganho >= 0 ? '+' + fmtMin(ganho) : '-' + fmtMin(-ganho);
+        const cancTxt = rc.canceladas > 0 ? `<p class="text-[11px] text-purple-300/70 font-mono-code">${rc.canceladas} ${rc.canceladas === 1 ? 'missão pulada' : 'missões puladas'} hoje</p>` : '';
+        container.innerHTML = `
+            <div class="card-vitoria-dia relative overflow-hidden bg-gradient-to-br from-[#1b1438] via-[#17112d] to-[#111c2b] border border-emerald-400/40 p-8 rounded-2xl text-center space-y-4">
+                <div class="vitoria-brilho"></div>
+                <div class="relative inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-400/50 text-emerald-300 shadow-lg shadow-emerald-500/20 trofeu-flutuar">
+                    <i class="fa-solid fa-circle-check text-3xl"></i>
+                </div>
+                <div class="relative space-y-1.5">
+                    <h3 class="text-lg font-black uppercase tracking-wider text-white">Parabéns! ${fComodo} concluído</h3>
+                    <p class="text-xs text-purple-200/80 max-w-md mx-auto leading-relaxed">Todas as tarefas de ${fComodo} de hoje estão feitas.</p>
+                    ${cancTxt}
+                </div>
+                <div class="relative grid grid-cols-4 gap-2 max-w-lg mx-auto pt-1 font-mono-code">
+                    <div class="bg-[#090614]/80 border border-emerald-500/30 rounded-xl px-2 py-2"><div class="text-[10px] text-purple-300/60 uppercase">Concluídas</div><div class="text-sm font-black text-emerald-400">${rc.concluidas}</div></div>
+                    <div class="bg-[#090614]/80 border border-indigo-500/30 rounded-xl px-2 py-2"><div class="text-[10px] text-purple-300/60 uppercase">Previsto</div><div class="text-sm font-black text-indigo-300">${fmtMin(rc.prev)}</div></div>
+                    <div class="bg-[#090614]/80 border border-purple-500/30 rounded-xl px-2 py-2"><div class="text-[10px] text-purple-300/60 uppercase">Real</div><div class="text-sm font-black text-purple-200">${fmtMin(rc.real)}</div></div>
+                    <div class="bg-[#090614]/80 border border-amber-500/30 rounded-xl px-2 py-2"><div class="text-[10px] text-purple-300/60 uppercase">Saldo</div><div class="text-sm font-black text-amber-300">${ganhoTxt}</div></div>
+                </div>
+            </div>
+        `;
+        return;
+    }
 
     if (missoesAtivas.length === 0) {
         const missoesHoje = missoes.filter(m => !m.data || m.data === hojeStr);
@@ -1838,6 +1868,41 @@ function fecharModalDetalhesComodo() {
     if (modal) modal.classList.add('hidden');
 }
 
+function hmsParaSeg(h) {
+    const m = String(h || '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    return m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+(m[3] || 0)) : null;
+}
+
+// Tempo real (min) de uma missao concluida: medido na sessao, ou pela planilha
+// (Hora de Termino - Hora de Inicio); sem nenhum dos dois, assume o estimado.
+function tempoRealDaMissao(m) {
+    if (m.tempoRealMin) return m.tempoRealMin;
+    const ini = hmsParaSeg(m['Hora de Início'] || m.horaInicio);
+    const fim = hmsParaSeg(m['Hora de Término'] || m.horaFim);
+    if (ini !== null && fim !== null && fim > ini) return Math.max(1, Math.round((fim - ini) / 60));
+    return parseFloat(m.tempoEstimado) || 0;
+}
+
+function fmtMin(min) {
+    min = Math.round(min || 0);
+    if (min < 60) return min + ' min';
+    const h = Math.floor(min / 60), r = min % 60;
+    return h + 'h' + (r ? String(r).padStart(2, '0') : '');
+}
+
+// Resumo de um comodo no dia: so "completo" quando nao resta nada pendente
+// e ao menos uma missao foi concluida (canceladas nao contam como pendentes).
+function resumoComodoHoje(comodo) {
+    const hojeStr = obterDataHojeStr();
+    const doComodo = missoes.filter(m => (!m.data || m.data === hojeStr) && m.comodo === comodo);
+    const conc = doComodo.filter(m => (m.status || '').trim() === 'Concluído');
+    const canc = doComodo.filter(m => (m.status || '').trim() === 'Cancelado');
+    const pend = doComodo.length - conc.length - canc.length;
+    let prev = 0, real = 0;
+    conc.forEach(m => { prev += parseFloat(m.tempoEstimado) || 0; real += tempoRealDaMissao(m); });
+    return { completo: pend === 0 && conc.length > 0, concluidas: conc.length, canceladas: canc.length, prev, real };
+}
+
 function atualizarEstatisticasGerais() {
     const hojeStr = obterDataHojeStr();
 
@@ -1847,6 +1912,8 @@ function atualizarEstatisticasGerais() {
     let concluidasTotal = 0;
     let tempoTotalPrevistoMin = 0;
     let creditosEconomizadosMin = 0;
+    let concluidasPrevMin = 0;
+    let concluidasRealMin = 0;
 
     missoes.forEach(m => {
         if (m.data === hojeStr) {
@@ -1858,7 +1925,9 @@ function atualizarEstatisticasGerais() {
                 concluidasPorComodo[comodoKey] = (concluidasPorComodo[comodoKey] || 0) + 1;
 
                 let tempoEst = parseFloat(m.tempoEstimado) || 0;
-                let tempoReal = m.tempoRealMin || tempoEst;
+                let tempoReal = tempoRealDaMissao(m);
+                concluidasPrevMin += tempoEst;
+                concluidasRealMin += tempoReal;
                 let ganho = tempoEst - tempoReal;
                 if (ganho > 0) creditosEconomizadosMin += ganho;
 
@@ -1929,6 +1998,17 @@ function atualizarEstatisticasGerais() {
             elTerm.innerText = '--:--';
         }
     }
+
+    const elIni = document.getElementById('statInicioTurno');
+    if (elIni) {
+        elIni.innerText = estadoPonto.inicioTurnoMs
+            ? String(new Date(estadoPonto.inicioTurnoMs).getHours()).padStart(2, '0') + ':' + String(new Date(estadoPonto.inicioTurnoMs).getMinutes()).padStart(2, '0')
+            : '--:--';
+    }
+    const elPrevC = document.getElementById('statPrevistoConcluidas');
+    if (elPrevC) elPrevC.innerText = fmtMin(concluidasPrevMin);
+    const elRealC = document.getElementById('statRealConcluidas');
+    if (elRealC) elRealC.innerText = fmtMin(concluidasRealMin);
 
     const elCoins = document.getElementById('coinsBalance');
     if (elCoins) elCoins.innerText = `${creditosEconomizadosMin}m`;
@@ -2164,6 +2244,14 @@ function atualizarPainelFolga() {
     if (elTotal) elTotal.innerText = '/ ' + total + ' dias';
     if (elFaltam) elFaltam.innerText = faltam;
     if (elBarra) elBarra.style.width = pct + '%';
+    const elTol = document.getElementById('folgaTolerancia');
+    if (elTol) {
+        const tol = c.toleranciaCancelamentos !== undefined ? c.toleranciaCancelamentos : 3;
+        const hoje = c.canceladasHoje || 0;
+        const comCanc = c.diasComCancelamento || 0;
+        elTol.innerHTML = 'Puladas hoje: <span class="' + (hoje > tol ? 'text-rose-400' : 'text-indigo-300') + ' font-bold">' + hoje + '/' + tol + '</span>' +
+            ' · dias perfeitos com pulos: <span class="text-indigo-300 font-bold">' + comCanc + '</span>';
+    }
 
     const cfgDias = document.getElementById('cfgDiasTrabalhados');
     const cfgFaltam = document.getElementById('cfgFaltam');
