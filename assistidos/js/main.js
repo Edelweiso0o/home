@@ -117,10 +117,18 @@
             try { dados = JSON.parse(res.corpo); } catch (e) { return falhar('Resposta invalida do servidor.'); }
             if (dados && dados.status === 'error') return falhar('API: ' + (dados.message || 'erro desconhecido'));
             salvarChaveAPI(chave);
-            if (dados && dados.obras) { cacheLocal(dados.obras); }
             firmar();
             fecharModalChave();
-            carregar();
+            try {
+                itens = (dados.obras || []).map(obraParaItem);
+                cacheLocal(itens);
+                render();
+                if (dados.resumo) atualizarResumo(dados.resumo);
+            } catch (e) {
+                console.error('[assistidos] falha ao desenhar a lista:', e);
+                var av = document.getElementById('avisoOffline');
+                if (av) { av.hidden = false; av.textContent = 'Erro ao montar a lista: ' + e.message; }
+            }
         }).catch(function (e) {
             falhar('Sem conexao: ' + (e && e.message ? e.message : 'falhou'));
         });
