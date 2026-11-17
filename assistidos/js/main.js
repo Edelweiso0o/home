@@ -27,6 +27,8 @@
     var API_URL = '/api/assistidos';
 
     var CHAVE_STORAGE = 'assistidos.itens.v1';
+    var ROTULOS_TIPO = { filme: 'Filme', serie: 'Série', anime: 'Anime', dorama: 'Dorama', documentario: 'Documentário' };
+    var ROTULOS_STATUS = { assistindo: 'Assistindo', completo: 'Completo', pausado: 'Pausado', largado: 'Largado', quero_ver: 'Quero ver' };
 
 
 
