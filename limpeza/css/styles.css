@@ -150,3 +150,14 @@ body > header, body > main { position: relative; z-index: 2; }
 .ocioso-pausado {
     animation: ociosoPausado 1s steps(1, end) infinite;
 }
+
+/* Missao que acabou de ser movida no modal de ordem: fica destacada em ambar
+   ate o modal fechar ou outra missao ser movida. */
+@keyframes ordemMovidaPulso {
+    0%   { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(251, 191, 36, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+}
+.ordem-card-movida {
+    animation: ordemMovidaPulso 1.2s ease-out 2;
+}
