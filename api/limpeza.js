@@ -205,6 +205,49 @@ const BORDA_EXTERNA = { style: "SOLID_MEDIUM", color: COR_PRETA };
 const BORDA_INTERNA = { style: "SOLID", color: COR_LARANJA };
 const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 
+// Autoajuste do Sheets + folga de 5% em cada coluna.
+// O Sheets nao tem "autofit com margem": fazemos o autoajuste, lemos a largura
+// que ele calculou (pixelSize) e reaplicamos 5% maior.
+const FOLGA_LARGURA_COLUNA = 0.05;
+
+async function autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex) {
+  try {
+    const dim = { sheetId, dimension: "COLUMNS", startIndex: startColumnIndex, endIndex: endColumnIndex };
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ autoResizeDimensions: { dimensions: dim } }] }
+    });
+
+    const meta = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets(properties(sheetId),data(columnMetadata(pixelSize)))'
+    });
+    const aba = (meta.data.sheets || []).find(sh => sh.properties && sh.properties.sheetId === sheetId);
+    const cols = (aba && aba.data && aba.data[0] && aba.data[0].columnMetadata) || [];
+    if (cols.length === 0) return;
+
+    const requests = [];
+    for (let i = startColumnIndex; i < endColumnIndex; i++) {
+      const largura = parseInt(cols[i] && cols[i].pixelSize, 10);
+      if (!Number.isFinite(largura) || largura <= 0) continue;
+      const nova = Math.ceil(largura * (1 + FOLGA_LARGURA_COLUNA));
+      if (nova === largura) continue;
+      requests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
+          properties: { pixelSize: nova },
+          fields: "pixelSize"
+        }
+      });
+    }
+    if (requests.length > 0) {
+      await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+    }
+  } catch (e) {
+    console.error("[autoajustarColunas] ERRO:", e && e.message);
+  }
+}
+
 async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -313,14 +356,11 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     });
 
-    // 4) Autoajuste da largura das colunas da tabela
-    requests.push({
-      autoResizeDimensions: {
-        dimensions: { sheetId, dimension: "COLUMNS", startIndex: startColumnIndex, endIndex: endColumnIndex }
-      }
-    });
-
     await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+
+    // 4) Largura das colunas: autoajuste + 5% de folga (o autoajuste sozinho
+    //    deixa o texto colado na borda).
+    await autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex);
   } catch (e) {
     console.error(`Erro ao formatar tabela ${sheetName}:`, e);
   }
