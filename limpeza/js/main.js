@@ -1901,6 +1901,7 @@ function normalizarDataDeMissao(valor) {
 // =====================================================================
 let ordemMissoes = [];   // copia de trabalho enquanto o modal esta aberto
 let ordemSalvando = false;
+let ordemMovida = null;   // ultima missao movida (destacada no modal)
 
 function abrirModalOrdemMissoes() {
     const modal = document.getElementById('modalOrdemMissoes');
@@ -1910,20 +1911,16 @@ function abrirModalOrdemMissoes() {
 
     // Fonte: catalogo da aba Missoes (todas as cadastradas).
     const fonte = (catalogoMissoes && catalogoMissoes.length > 0) ? catalogoMissoes : missoes;
+    // A ordem e a posicao da linha na aba "Missoes" (a mesma do lancamento).
     ordemMissoes = fonte
         .filter(m => m && m.titulo)
         .map(m => ({
             titulo: String(m.titulo || '').trim(),
             comodo: String(m.comodo || '').trim(),
-            prioridade: m.prioridade || 'Média',
-            ordem: parseInt(m.ordem, 10) || 0
+            prioridade: m.prioridade || 'Média'
         }));
 
-    // Sem ordem definida: mantem a ordem da planilha (que e a de lancamento)
-    const semOrdem = ordemMissoes.every(m => !m.ordem);
-    if (semOrdem) ordemMissoes.forEach((m, i) => { m.ordem = i + 1; });
-    ordemMissoes.sort((a, b) => (a.ordem || 9999) - (b.ordem || 9999));
-
+    ordemMovida = null;
     renderizarListaOrdem('');
     modal.classList.remove('hidden');
 }
@@ -1957,11 +1954,17 @@ function renderizarListaOrdem(termo) {
         const pos = ordemMissoes.indexOf(m);
         const primeiro = pos === 0;
         const ultimo = pos === ordemMissoes.length - 1;
-        const tituloEsc = escHtml(m.titulo).replace(/'/g, '&#39;');
+        const movida = !!ordemMovida && ordemMovida.titulo === m.titulo && ordemMovida.comodo === m.comodo;
+        const classesCard = movida
+            ? 'ordem-card-movida bg-[#1b1030] border-amber-400/80 ring-1 ring-amber-400/40'
+            : 'bg-[#090614] border-purple-900/60';
+        const classesNumero = movida
+            ? 'bg-amber-400/20 border-amber-400/70 text-amber-300'
+            : 'bg-[#231a42] border-purple-800/60 text-emerald-300';
         return `
-            <div class="flex items-center justify-between gap-3 bg-[#090614] border border-purple-900/60 rounded-xl px-3 py-2">
+            <div class="ordem-card flex items-center justify-between gap-3 border rounded-xl px-3 py-2 transition-all duration-300 ${classesCard}">
                 <div class="flex items-center gap-3 min-w-0">
-                    <span class="w-7 h-7 shrink-0 rounded-lg bg-[#231a42] border border-purple-800/60 flex items-center justify-center text-[11px] font-bold font-mono-code text-emerald-300">${pos + 1}</span>
+                    <span class="w-7 h-7 shrink-0 rounded-lg border flex items-center justify-center text-[11px] font-bold font-mono-code ${classesNumero}">${pos + 1}</span>
                     <div class="min-w-0">
                         <div class="text-xs font-bold text-white truncate">${escHtml(m.titulo)}</div>
                         <div class="text-[10px] text-purple-300/60 font-mono-code">${escHtml(m.comodo || 'Sem cômodo')} • <span class="${(corPrioridade[m.prioridade] || corPrioridade['Média']).split(' ')[0]}">${escHtml(m.prioridade || 'Média')}</span></div>
@@ -1985,7 +1988,7 @@ function moverMissaoOrdem(pos, direcao) {
     const item = ordemMissoes[pos];
     ordemMissoes[pos] = ordemMissoes[alvo];
     ordemMissoes[alvo] = item;
-    ordemMissoes.forEach((m, i) => { m.ordem = i + 1; });
+    ordemMovida = item;   // fica destacada no modal
     const campo = document.getElementById('buscaOrdem');
     renderizarListaOrdem(campo ? campo.value : '');
 }
@@ -1994,15 +1997,18 @@ async function salvarOrdemMissoes() {
     if (ordemSalvando) return;
     ordemSalvando = true;
     try {
-        const itens = ordemMissoes.map((m, i) => ({ titulo: m.titulo, comodo: m.comodo, ordem: i + 1 }));
+        // A ordem E a posicao: a planilha e reescrita nessa sequencia.
+        const itens = ordemMissoes.map(m => ({ titulo: m.titulo, comodo: m.comodo }));
 
-        // Atualiza o estado local na hora (a fila ja respeita a ordem)
-        [catalogoMissoes, missoes].forEach(arr => {
-            (arr || []).forEach(m => {
-                const achou = itens.find(i => normalizarBusca(i.titulo) === normalizarBusca(m.titulo) && normalizarBusca(i.comodo) === normalizarBusca(m.comodo || ''));
-                if (achou) m.ordem = achou.ordem;
+        // Atualiza o estado local na hora, reordenando o catalogo
+        if (Array.isArray(catalogoMissoes)) {
+            const posicao = new Map(itens.map((i, idx) => [normalizarBusca(i.titulo) + '|' + normalizarBusca(i.comodo || ''), idx]));
+            catalogoMissoes.sort((a, b) => {
+                const pa = posicao.has(normalizarBusca(a.titulo) + '|' + normalizarBusca(a.comodo || '')) ? posicao.get(normalizarBusca(a.titulo) + '|' + normalizarBusca(a.comodo || '')) : 9999;
+                const pb = posicao.has(normalizarBusca(b.titulo) + '|' + normalizarBusca(b.comodo || '')) ? posicao.get(normalizarBusca(b.titulo) + '|' + normalizarBusca(b.comodo || '')) : 9999;
+                return pa - pb;
             });
-        });
+        }
         salvarDadosLocalStorage();
         renderizarMissoes();
 
@@ -2016,7 +2022,7 @@ async function salvarOrdemMissoes() {
             return;
         }
         fecharModalOrdemMissoes();
-        mostrarNotificacao('Ordem salva', 'As missões serão lançadas nessa ordem.', 'sucesso', 2500);
+        mostrarNotificacao('Ordem salva', 'A planilha foi reescrita nessa sequência.', 'sucesso', 2500);
         await carregarDadosDoServidor(false);
     } catch (e) {
         console.error('[salvarOrdemMissoes]', e);
