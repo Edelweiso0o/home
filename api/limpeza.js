@@ -225,16 +225,15 @@ function larguraTextoPx(texto, negrito) {
   if (t === '') return 0;
   let unidade = 0;
   for (const ch of t) {
-    if (/[MWÁÉÍÓÚÂÊÔÃÕÀÇ@%çmw]/.test(ch)) unidade += 1.15;
-    else if (/[ilj1.,:;'!|\[\]()]/.test(ch)) unidade += 0.45;
-    else if (/[A-Z0-9]/.test(ch)) unidade += 0.8;
+    if ('MWÁÉÍÓÚÂÊÔÃÕÀÇ@%çmw'.includes(ch)) unidade += 1.15;
+    else if ("ilj1.,:;'!|[]() ".includes(ch)) unidade += 0.45;
+    else if (ch === ch.toUpperCase() && ch !== ch.toLowerCase()) unidade += 0.8;
+    else if (/[0-9]/.test(ch)) unidade += 0.8;
     else unidade += 0.68;
   }
-  // Roboto 10pt: ~5.6px por "unidade"; negrito ~7% mais largo.
-  const px = unidade * 5.6 * (negrito ? 1.07 : 1);
-  // O Sheets nao quebra linha por padrao, mas respeita o tamanho da fonte
-  // das celulas formatadas. Base minima para nao ficar colado na borda.
-  return px;
+  // Calibrado contra o "autoajuste" real do Sheets (duplo clique):
+  // Roboto 10 -> 2,75px por unidade (17px da fonte), negrito 7% mais.
+  return unidade * 2.75 * (negrito ? 1.07 : 1);
 }
 
 // Devolve, para cada coluna pedida, a largura final (px): maior texto da coluna
@@ -275,8 +274,10 @@ function calcularLargurasDasColunas(rows, headerRowIndex, colMap, startColumnInd
 
     // Respiro: 22px de padding (11 de cada lado) + 18px do icone de filtro,
     // que agora ocupa espaco no cabecalho de toda coluna.
-    const RESPIRO = 40;
-    const base = Math.max(maiorCabecalho + RESPIRO, maiorCorpo + 22, 60);
+    // Respiro: 32px de padding (16 de cada lado) + 16px do icone de filtro no cabecalho.
+    const RESPIRO_CABECALHO = 48;
+    const RESPIRO_CORPO = 32;
+    const base = Math.max(maiorCabecalho + RESPIRO_CABECALHO, maiorCorpo + RESPIRO_CORPO, 60);
     const final = Math.round(base * (1 + FOLGA_LARGURA_COLUNA));
     larguras.set(c, final);
   }
