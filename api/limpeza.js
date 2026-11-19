@@ -119,7 +119,7 @@ const ROTULO_ABA = {
 const ID_INICIAL_MISSOES = 1001;
 
 const COLUNAS_PREVIA = {
-  "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade", "Ordem"],
+  "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade"],
   "Progresso Diário": ["ID", "Data", "Título da Missão", "Cômodo", "Status", "Hora de Início", "Hora de Término"],
   "Registro de Ponto": ["ID Turno", "Data", "Hora Entrada", "Hora Saída", "Tempo Trabalhado", "Status do Turno"],
   "Conquistas": ["ID", "Título", "Raridade", "Tipo de Meta", "Filtro", "Meta", "Progresso Atual", "Status", "Data Conquista"]
@@ -361,6 +361,54 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
     // 4) Largura das colunas: autoajuste + 5% de folga (o autoajuste sozinho
     //    deixa o texto colado na borda).
     await autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex);
+
+    // 5) Filtro em todas as colunas da tabela (seta de filtro no cabecalho)
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{
+            setBasicFilter: {
+              filter: { range: { sheetId, startRowIndex: startRowIndex, endRowIndex, startColumnIndex, endColumnIndex } }
+            }
+          }]
+        }
+      });
+    } catch (eF) {
+      console.error("[formatarTabelaCompleta] filtro:", eF && eF.message);
+    }
+
+    // 6) Primeira coluna (a faixa em branco antes do ID) na mesma largura das outras
+    try {
+      const meta2 = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets(properties(sheetId),data(columnMetadata(pixelSize)))'
+      });
+      const aba2 = (meta2.data.sheets || []).find(sh => sh.properties && sh.properties.sheetId === sheetId);
+      const cols2 = (aba2 && aba2.data && aba2.data[0] && aba2.data[0].columnMetadata) || [];
+      const larguras = [];
+      for (let i = startColumnIndex; i < endColumnIndex; i++) {
+        const px = parseInt(cols2[i] && cols2[i].pixelSize, 10);
+        if (Number.isFinite(px) && px > 0) larguras.push(px);
+      }
+      if (larguras.length > 0 && startColumnIndex > 0) {
+        const media = Math.round(larguras.reduce((a, b) => a + b, 0) / larguras.length);
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: {
+            requests: [{
+              updateDimensionProperties: {
+                range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: startColumnIndex },
+                properties: { pixelSize: media },
+                fields: "pixelSize"
+              }
+            }]
+          }
+        });
+      }
+    } catch (eC) {
+      console.error("[formatarTabelaCompleta] largura coluna 1:", eC && eC.message);
+    }
   } catch (e) {
     console.error(`Erro ao formatar tabela ${sheetName}:`, e);
   }
