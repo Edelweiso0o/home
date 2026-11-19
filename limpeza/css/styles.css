@@ -140,3 +140,13 @@ body > header, body > main { position: relative; z-index: 2; }
     background: radial-gradient(circle at 50% 25%, rgba(251, 191, 36, 0.14), transparent 55%);
     pointer-events: none;
 }
+
+/* Tempo ocioso pausado: pisca em vermelho no proprio numero,
+   sem texto extra (o texto mudava a altura do card e a tela piscava). */
+@keyframes ociosoPausado {
+    0%, 100% { color: #f43f5e; opacity: 1; }
+    50%      { color: #7f1d3a; opacity: 0.35; }
+}
+.ocioso-pausado {
+    animation: ociosoPausado 1s steps(1, end) infinite;
+}
