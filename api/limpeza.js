@@ -205,14 +205,10 @@ const BORDA_EXTERNA = { style: "SOLID_MEDIUM", color: COR_PRETA };
 const BORDA_INTERNA = { style: "SOLID", color: COR_LARANJA };
 const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 
-// Largura fixa da coluna 1 (a faixa em branco antes do ID), igual em todas as abas.
-const LARGURA_COLUNA_1 = 40;
-
-// Autoajuste nativo do Sheets + 10% de folga.
-// O Sheets nao tem "autofit com margem": fazemos o autoajuste, lemos a largura
-// que ele calculou (pixelSize) e reaplicamos 10% maior.
-const FOLGA_LARGURA_COLUNA = 0.10;
-
+// Autoajuste NATIVO do Sheets, sem nenhuma conta por cima.
+// Medir texto na mao nunca bateu: o Sheets mede com a fonte e o padding que
+// ele realmente aplica. autoResizeDimensions e a mesma coisa que o duplo
+// clique no separador de coluna — deixe ele decidir.
 async function autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex) {
   try {
     await sheets.spreadsheets.batchUpdate({
@@ -225,29 +221,6 @@ async function autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnInd
         }]
       }
     });
-
-    const meta = await sheets.spreadsheets.get({
-      spreadsheetId,
-      fields: 'sheets(properties(sheetId),data(columnMetadata(pixelSize)))'
-    });
-    const aba = (meta.data.sheets || []).find(sh => sh.properties && sh.properties.sheetId === sheetId);
-    const cols = (aba && aba.data && aba.data[0] && aba.data[0].columnMetadata) || [];
-
-    const requests = [];
-    for (let i = startColumnIndex; i < endColumnIndex; i++) {
-      const largura = parseInt(cols[i] && cols[i].pixelSize, 10);
-      if (!Number.isFinite(largura) || largura <= 0) continue;
-      requests.push({
-        updateDimensionProperties: {
-          range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
-          properties: { pixelSize: Math.round(largura * (1 + FOLGA_LARGURA_COLUNA)) },
-          fields: "pixelSize"
-        }
-      });
-    }
-    if (requests.length > 0) {
-      await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
-    }
   } catch (e) {
     console.error("[autoajustarColunas] ERRO:", e && e.message);
   }
@@ -417,7 +390,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
             requests: [{
               updateDimensionProperties: {
                 range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: startColumnIndex },
-                properties: { pixelSize: LARGURA_COLUNA_1 },
+                properties: { pixelSize: 44 },
                 fields: "pixelSize"
               }
             }]
