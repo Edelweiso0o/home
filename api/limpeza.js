@@ -1542,7 +1542,9 @@ export default async function handler(req, res) {
         });
 
         // A coluna "Ordem" (criada na versao anterior) sai: a ordem agora e a posicao.
-        if (mColMap["Ordem"] !== undefined) {
+        // Ela e a ULTIMA coluna, entao apagar a coluna nao desalinha os dados.
+        const ultimaCol = Math.max(...Object.values(mColMap));
+        if (mColMap["Ordem"] !== undefined && mColMap["Ordem"] === ultimaCol) {
           try {
             const sheetIdRes = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets(properties(sheetId,title))' });
             const aba = (sheetIdRes.data.sheets || []).find(s => s.properties && s.properties.title === "Missões");
