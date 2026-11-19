@@ -214,14 +214,14 @@ const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 // deixava texto cortado, enquanto o duplo clique no Sheets acertava.
 const FOLGA_LARGURA_COLUNA = 0.10;
 // O Sheets mostra ~6px a menos do que o pixelSize pedido (zebra vertical).
-const PIXELS_FANTASMA_SHEETS = 6;
+const PIXELS_FANTASMA_SHEETS = 8;
 // Largura fixa da coluna 1 (a faixa em branco antes do ID), igual em todas as abas.
 const LARGURA_COLUNA_1 = 40;
 // Largura de uma coluna sem nenhum dado abaixo do cabecalho.
 const LARGURA_COLUNA_VAZIA = 90;
 // Tetos de largura: nenhuma coluna fica maior que isso, senao uma descricao
 // longa empurra o resto da tabela para fora da tela.
-const LARGURA_MAX_COLUNA_CORPO = 320;
+const LARGURA_MAX_COLUNA_CORPO = 480;
 const LARGURA_MIN_COLUNA = 60;
 
 // Largura aproximada de um texto no Roboto 10 (px por caractere).
@@ -237,9 +237,10 @@ function larguraTextoPx(texto, negrito) {
     else if (/[0-9]/.test(ch)) unidade += 0.8;
     else unidade += 0.68;
   }
-  // Calibrado contra o "autoajuste" real do Sheets (duplo clique):
-  // Roboto 10 -> 2,75px por unidade (17px da fonte), negrito 7% mais.
-  return unidade * 2.75 * (negrito ? 1.07 : 1);
+  // Calibrado contra o "autoajuste" real do Sheets (duplo clique) com Arial 10,
+  // que e a fonte que o Sheets aplica quando a celula nao tem fonte explicita.
+  // "Economize 1440 minutos (24 horas) no total." (~45 caracteres) -> ~320px.
+  return unidade * 7.2 * (negrito ? 1.07 : 1);
 }
 
 // Devolve, para cada coluna pedida, a largura final (px): maior texto da coluna
@@ -399,10 +400,13 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
             userEnteredFormat: {
               horizontalAlignment: "CENTER",
               verticalAlignment: "MIDDLE",
+              // WRAP: texto comprido quebra em duas linhas dentro da celula em
+              // vez de vazar por cima da vizinha (era isso que cortava tudo).
+              wrapStrategy: "WRAP",
               textFormat: { fontFamily: "Roboto", fontSize: 10 }
             }
           },
-          fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat"
+          fields: "userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy,userEnteredFormat.textFormat"
         }
       }
     ];
@@ -426,10 +430,11 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
             backgroundColor: { red: 0.2, green: 0.25, blue: 0.3 },
             textFormat: { fontFamily: "Roboto", fontSize: 10, bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
             horizontalAlignment: "CENTER",
-            verticalAlignment: "MIDDLE"
+            verticalAlignment: "MIDDLE",
+            wrapStrategy: "CLIP"
           }
         },
-        fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment"
+        fields: "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy"
       }
     });
 
