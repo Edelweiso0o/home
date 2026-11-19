@@ -213,10 +213,16 @@ const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 // com icone de filtro) de outro — na pratica o "autoajuste" batia por API
 // deixava texto cortado, enquanto o duplo clique no Sheets acertava.
 const FOLGA_LARGURA_COLUNA = 0.10;
+// O Sheets mostra ~6px a menos do que o pixelSize pedido (zebra vertical).
+const PIXELS_FANTASMA_SHEETS = 6;
 // Largura fixa da coluna 1 (a faixa em branco antes do ID), igual em todas as abas.
 const LARGURA_COLUNA_1 = 40;
 // Largura de uma coluna sem nenhum dado abaixo do cabecalho.
 const LARGURA_COLUNA_VAZIA = 90;
+// Tetos de largura: nenhuma coluna fica maior que isso, senao uma descricao
+// longa empurra o resto da tabela para fora da tela.
+const LARGURA_MAX_COLUNA_CORPO = 320;
+const LARGURA_MIN_COLUNA = 60;
 
 // Largura aproximada de um texto no Roboto 10 (px por caractere).
 // Caracteres largos contam mais: W, M, O, acentos, digito monoespacado.
@@ -256,6 +262,10 @@ function ultimaColunaComDado(rows, headerRowIndex, startColumnIndex, endColumnIn
 }
 
 function calcularLargurasDasColunas(rows, headerRowIndex, colMap, startColumnIndex, endColumnIndex) {
+  // Mede o cabecalho e o corpo SEPARADOS. Sem largura fixa, dois textos muito
+  // longos (ex.: uma descricao de 60 caracteres e o cabecalho) brigam pela
+  // mesma largura: o corpo vence, o cabecalho quebra em duas linhas e o
+  // filtro nao cabe. Agora os dois tem limite proprio e o cabecalho manda.
   const larguras = new Map();
   for (let c = startColumnIndex; c < endColumnIndex; c++) {
     // Coluna sem dado: largura padrao, para nao abrir um "vazio" gigante na tabela.
@@ -268,17 +278,22 @@ function calcularLargurasDasColunas(rows, headerRowIndex, colMap, startColumnInd
     rows.forEach((row, i) => {
       const valor = row && row[c] !== undefined && row[c] !== null ? String(row[c]) : '';
       if (valor.trim() === '') return;
-      if (i <= headerRowIndex) maiorCabecalho = Math.max(maiorCabecalho, larguraTextoPx(valor, true));
-      else maiorCorpo = Math.max(maiorCorpo, larguraTextoPx(valor, false));
+      if (i === headerRowIndex) maiorCabecalho = Math.max(maiorCabecalho, larguraTextoPx(valor, true));
+      else if (i > headerRowIndex) maiorCorpo = Math.max(maiorCorpo, larguraTextoPx(valor, false));
     });
 
-    // Respiro: 22px de padding (11 de cada lado) + 18px do icone de filtro,
-    // que agora ocupa espaco no cabecalho de toda coluna.
-    // Respiro: 32px de padding (16 de cada lado) + 16px do icone de filtro no cabecalho.
-    const RESPIRO_CABECALHO = 48;
-    const RESPIRO_CORPO = 32;
-    const base = Math.max(maiorCabecalho + RESPIRO_CABECALHO, maiorCorpo + RESPIRO_CORPO, 60);
-    const final = Math.round(base * (1 + FOLGA_LARGURA_COLUNA));
+    // Cabecalho: padding (16+16) + icone de filtro (~18) e 10% de folga.
+    // Nao tem teto: cabecalho quebrado em duas linhas e o que deixava o filtro
+    // fora da area visivel.
+    const larguraCabecalho = Math.round((maiorCabecalho + 50) * (1 + FOLGA_LARGURA_COLUNA));
+
+    // Corpo: tem teto. Texto muito longo (descricao, titulo) fica com largura
+    // confortavel e o resto e lido no balao/barra de formula, em vez de
+    // esmagar as outras colunas.
+    const larguraCorpo = Math.min(Math.round(maiorCorpo + 28), LARGURA_MAX_COLUNA_CORPO);
+
+    // Compensa os pixels que o Sheets "esconde" da largura pedida.
+    const final = Math.max(larguraCabecalho, larguraCorpo, LARGURA_MIN_COLUNA) + PIXELS_FANTASMA_SHEETS;
     larguras.set(c, final);
   }
   return larguras;
