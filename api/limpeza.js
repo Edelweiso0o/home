@@ -205,39 +205,103 @@ const BORDA_EXTERNA = { style: "SOLID_MEDIUM", color: COR_PRETA };
 const BORDA_INTERNA = { style: "SOLID", color: COR_LARANJA };
 const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 
-// Autoajuste do Sheets + folga de 10% em cada coluna (o filtro no cabecalho come espaco).
-// O Sheets nao tem "autofit com margem": fazemos o autoajuste, lemos a largura
-// que ele calculou (pixelSize) e reaplicamos 10% maior.
+// Mede o texto DAS CELULAS (nao o que esta digitado) e devolve a largura em
+// pixels que cabe nele, com 10% de folga.
+//
+// Por que medir na mao: o autoResizeDimensions do Sheets trata celula com
+// quebra de linha/formatacao de um jeito e o cabecalho (negrito, centrado,
+// com icone de filtro) de outro — na pratica o "autoajuste" batia por API
+// deixava texto cortado, enquanto o duplo clique no Sheets acertava.
 const FOLGA_LARGURA_COLUNA = 0.10;
 // Largura fixa da coluna 1 (a faixa em branco antes do ID), igual em todas as abas.
 const LARGURA_COLUNA_1 = 40;
 
-async function autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex) {
-  try {
-    const dim = { sheetId, dimension: "COLUMNS", startIndex: startColumnIndex, endIndex: endColumnIndex };
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests: [{ autoResizeDimensions: { dimensions: dim } }] }
+// Largura aproximada de um texto no Roboto 10 (px por caractere).
+// Caracteres largos contam mais: W, M, O, acentos, digito monoespacado.
+function larguraTextoPx(texto, negrito) {
+  const t = String(texto || '');
+  if (t === '') return 0;
+  let unidade = 0;
+  for (const ch of t) {
+    if (/[MWÁÉÍÓÚÂÊÔÃÕÀÇ@%çmw]/.test(ch)) unidade += 1.15;
+    else if (/[ilj1.,:;'!|\[\]()]/.test(ch)) unidade += 0.45;
+    else if (/[A-Z0-9]/.test(ch)) unidade += 0.8;
+    else unidade += 0.68;
+  }
+  // Roboto 10pt: ~5.6px por "unidade"; negrito ~7% mais largo.
+  const px = unidade * 5.6 * (negrito ? 1.07 : 1);
+  // O Sheets nao quebra linha por padrao, mas respeita o tamanho da fonte
+  // das celulas formatadas. Base minima para nao ficar colado na borda.
+  return px;
+}
+
+// Devolve, para cada coluna pedida, a largura final (px): maior texto da coluna
+// + respiro (padding de celula + icone de filtro) + 10% de folga.
+function calcularLargurasDasColunas(rows, headerRowIndex, colMap, startColumnIndex, endColumnIndex) {
+  const larguras = new Map();
+  for (let c = startColumnIndex; c < endColumnIndex; c++) {
+    let maiorCabecalho = 0;
+    let maiorCorpo = 0;
+    rows.forEach((row, i) => {
+      const valor = row && row[c] !== undefined && row[c] !== null ? String(row[c]) : '';
+      if (valor.trim() === '') return;
+      if (i <= headerRowIndex) maiorCabecalho = Math.max(maiorCabecalho, larguraTextoPx(valor, true));
+      else maiorCorpo = Math.max(maiorCorpo, larguraTextoPx(valor, false));
     });
 
-    const meta = await sheets.spreadsheets.get({
-      spreadsheetId,
-      fields: 'sheets(properties(sheetId),data(columnMetadata(pixelSize)))'
-    });
-    const aba = (meta.data.sheets || []).find(sh => sh.properties && sh.properties.sheetId === sheetId);
-    const cols = (aba && aba.data && aba.data[0] && aba.data[0].columnMetadata) || [];
-    if (cols.length === 0) return;
+    // Respiro: 22px de padding (11 de cada lado) + 18px do icone de filtro,
+    // que agora ocupa espaco no cabecalho de toda coluna.
+    const RESPIRO = 40;
+    const base = Math.max(maiorCabecalho + RESPIRO, maiorCorpo + 22, 60);
+    const final = Math.round(base * (1 + FOLGA_LARGURA_COLUNA));
+    larguras.set(c, final);
+  }
+  return larguras;
+}
+
+// Aplica o autoResizeDimensions como ponto de partida e SOBREPOE com a medida
+// calculada acima — assim a largura final e sempre >= a que o duplo clique daria.
+async function autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex, largurasCalculadas) {
+  try {
+    // 1) autoajuste nativo (ponto de partida)
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{
+            autoResizeDimensions: {
+              dimensions: { sheetId, dimension: "COLUMNS", startIndex: startColumnIndex, endIndex: endColumnIndex }
+            }
+          }]
+        }
+      });
+    } catch (eAuto) {
+      console.error("[autoajustarColunas] autoResize:", eAuto && eAuto.message);
+    }
+
+    // 2) largura medida do texto (fonte da verdade)
+    let larguras = largurasCalculadas instanceof Map ? largurasCalculadas : null;
+    if (!larguras) {
+      const meta = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets(properties(sheetId),data(columnMetadata(pixelSize)))'
+      });
+      const aba = (meta.data.sheets || []).find(sh => sh.properties && sh.properties.sheetId === sheetId);
+      const cols = (aba && aba.data && aba.data[0] && aba.data[0].columnMetadata) || [];
+      larguras = new Map();
+      for (let i = startColumnIndex; i < endColumnIndex; i++) {
+        const px = parseInt(cols[i] && cols[i].pixelSize, 10);
+        if (Number.isFinite(px) && px > 0) larguras.set(i, Math.round(px * (1 + FOLGA_LARGURA_COLUNA)));
+      }
+    }
 
     const requests = [];
-    for (let i = startColumnIndex; i < endColumnIndex; i++) {
-      const largura = parseInt(cols[i] && cols[i].pixelSize, 10);
-      if (!Number.isFinite(largura) || largura <= 0) continue;
-      const nova = Math.round(largura * (1 + FOLGA_LARGURA_COLUNA));
-      if (nova === largura) continue;
+    for (const [i, px] of larguras) {
+      if (!Number.isFinite(px) || px <= 0) continue;
       requests.push({
         updateDimensionProperties: {
           range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
-          properties: { pixelSize: nova },
+          properties: { pixelSize: px },
           fields: "pixelSize"
         }
       });
@@ -362,7 +426,8 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 
     // 4) Largura das colunas: autoajuste + 5% de folga (o autoajuste sozinho
     //    deixa o texto colado na borda).
-    await autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex);
+    const largurasCalc = calcularLargurasDasColunas(rows, headerRowIndex, colMap, startColumnIndex, endColumnIndex);
+    await autoajustarColunas(sheets, spreadsheetId, sheetId, startColumnIndex, endColumnIndex, largurasCalc);
 
     // 5) Filtro em todas as colunas da tabela (seta de filtro no cabecalho)
     try {
