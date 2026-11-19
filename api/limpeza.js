@@ -1479,7 +1479,10 @@ export default async function handler(req, res) {
       }
 
       if (acao === 'salvarOrdem') {
-        // data.itens = [{ titulo, comodo, ordem }, ...]
+        // Reordena as linhas da aba "Missões" na ordem enviada, reescrevendo o
+        // bloco inteiro de uma vez. Nao cria coluna nenhuma: a ordem E a posicao
+        // da linha na planilha.
+        // data.itens = [{ titulo, comodo }, ...] na ordem desejada
         const itens = Array.isArray(data.itens) ? data.itens : [];
         if (itens.length === 0) {
           return res.status(400).json({ status: 'error', message: 'Nenhuma missão informada.' });
@@ -1488,52 +1491,75 @@ export default async function handler(req, res) {
         const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
         const mParsed = parseSheetRows(missoesRes.data.values || []);
         const mColMap = mParsed.colMap;
-
-        // Cria a coluna "Ordem" se ela ainda nao existir (ultima coluna do cabecalho)
-        if (mColMap["Ordem"] === undefined) {
-          const cols = Object.values(mColMap);
-          const novaCol = (cols.length > 0 ? Math.max(...cols) : 5) + 1;
-          await sheets.spreadsheets.values.update({
-            spreadsheetId,
-            range: `Missões!${columnToLetter(novaCol + 1)}2`,
-            valueInputOption: 'RAW',
-            requestBody: { values: [["Ordem"]] }
-          });
-          mColMap["Ordem"] = novaCol;
+        const colTitulo = mColMap["Título da Missão"];
+        const colComodo = mColMap["Cômodo"];
+        if (colTitulo === undefined) {
+          return res.status(400).json({ status: 'error', message: 'Coluna "Título da Missão" não encontrada.' });
         }
 
-        const atualizacoes = [];
+        const largura = Math.max(
+          ...mParsed.dataRows.map(r => r.length),
+          ...Object.values(mColMap).map(n => n + 1),
+          1
+        );
+        const chave = (t, c) => String(t || '').trim().toLowerCase() + '||' + String(c || '').trim().toLowerCase();
+
+        // Cada item pedido puxa a sua linha da planilha (na ordem em que veio).
+        const usadas = new Set();
+        const ordenadas = [];
         itens.forEach(item => {
-          const tituloBusca = String(item.titulo || "").trim().toLowerCase();
-          const comodoBusca = String(item.comodo || "").trim().toLowerCase();
-          const ordem = parseInt(item.ordem, 10);
-          if (!tituloBusca || !Number.isFinite(ordem)) return;
-
-          let mLinhaAlvo = -1;
-          mParsed.dataRows.forEach((row, idx) => {
-            const tVal = String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase();
-            if (tVal !== tituloBusca) return;
-            if (comodoBusca && mColMap["Cômodo"] !== undefined) {
-              const cVal = String(row[mColMap["Cômodo"]] || "").trim().toLowerCase();
-              if (cVal !== comodoBusca) return;
-            }
-            mLinhaAlvo = idx + mParsed.headerRowIndex + 2;
+          const k = chave(item.titulo, item.comodo);
+          const idx = mParsed.dataRows.findIndex((row, i) => {
+            if (usadas.has(i)) return false;
+            const mesmoTitulo = String(row[colTitulo] || '').trim().toLowerCase() === String(item.titulo || '').trim().toLowerCase();
+            if (!mesmoTitulo) return false;
+            if (colComodo === undefined) return true;
+            return chave(row[colTitulo], row[colComodo]) === k;
           });
-          if (mLinhaAlvo === -1) return;
-
-          atualizacoes.push({
-            range: `Missões!${columnToLetter(mColMap["Ordem"] + 1)}${mLinhaAlvo}`,
-            values: [[ordem]]
-          });
+          if (idx === -1) return;
+          usadas.add(idx);
+          ordenadas.push(mParsed.dataRows[idx]);
         });
 
-        if (atualizacoes.length > 0) {
-          await sheets.spreadsheets.values.batchUpdate({
-            spreadsheetId,
-            requestBody: { valueInputOption: 'USER_ENTERED', data: atualizacoes }
-          });
+        // O que nao veio no pedido (missao criada em outra aba aberta) fica no fim.
+        mParsed.dataRows.forEach((row, i) => { if (!usadas.has(i)) ordenadas.push(row); });
+
+        if (ordenadas.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'Nenhuma missão encontrada na planilha.' });
         }
-        return res.status(200).json({ status: "success", atualizadas: atualizacoes.length });
+
+        const linhas = ordenadas.map(row => {
+          const arr = Array.from({ length: largura }, (_, i) => row[i] !== undefined ? row[i] : "");
+          return arr;
+        });
+
+        const primeiraLinha = mParsed.headerRowIndex + 2;
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `Missões!A${primeiraLinha}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: linhas }
+        });
+
+        // A coluna "Ordem" (criada na versao anterior) sai: a ordem agora e a posicao.
+        if (mColMap["Ordem"] !== undefined) {
+          try {
+            const sheetIdRes = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets(properties(sheetId,title))' });
+            const aba = (sheetIdRes.data.sheets || []).find(s => s.properties && s.properties.title === "Missões");
+            if (aba) {
+              await sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                requestBody: {
+                  requests: [{ deleteDimension: { range: { sheetId: aba.properties.sheetId, dimension: 'COLUMNS', startIndex: mColMap["Ordem"], endIndex: mColMap["Ordem"] + 1 } } }]
+                }
+              });
+            }
+          } catch (eDel) {
+            console.error("[salvarOrdem] nao consegui remover a coluna Ordem:", eDel && eDel.message);
+          }
+        }
+
+        return res.status(200).json({ status: "success", reordenadas: linhas.length });
       }
 
       if (acao === 'excluirLinhas') {
