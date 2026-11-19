@@ -116,7 +116,7 @@ const ROTULO_ABA = {
 
 // Colunas que devem aparecer na previa de cada aba.
 const COLUNAS_PREVIA = {
-  "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade"],
+  "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade", "Ordem"],
   "Progresso Diário": ["ID", "Data", "Título da Missão", "Cômodo", "Status", "Hora de Início", "Hora de Término"],
   "Registro de Ponto": ["ID Turno", "Data", "Hora Entrada", "Hora Saída", "Tempo Trabalhado", "Status do Turno"],
   "Conquistas": ["ID", "Título", "Raridade", "Tipo de Meta", "Filtro", "Meta", "Progresso Atual", "Status", "Data Conquista"]
@@ -182,6 +182,8 @@ async function getSheetData(sheets, spreadsheetId, rangeName) {
     obj.tempoMedio = obj["Tempo Médio (Minutos)"] || "";
     obj.prioridade = obj["Prioridade"] || "";
     obj.frequenciaDias = parseInt(obj["Frequência (Dias)"] || 1, 10) || 1;
+    // Ordem de execucao (coluna opcional "Ordem" na aba Missoes). 0 = sem ordem.
+    obj.ordem = parseInt(obj["Ordem"], 10) || 0;
     obj.status = obj["Status"] !== undefined ? normalizarStatusMissao(obj["Status"]) : obj["Status do Turno"] || "";
     if (obj["Status"] !== undefined) obj["Status"] = obj.status;
     return obj;
@@ -318,7 +320,7 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
 // A configuracao mora na aba "Configuracoes" (linha 2 = cabecalho, coluna B = chave, C = valor).
 // A contagem de dias trabalhados vem do "Registro de Ponto": 1 turno por dia conta 1 dia.
 const ABA_CONFIG = "Configurações";
-const CONFIG_PADRAO = { diasParaFolga: 9, toleranciaCancelamentos: 3 };
+const CONFIG_PADRAO = { diasParaFolga: 9 };
 
 async function lerConfiguracoes(sheets, spreadsheetId) {
   try {
@@ -333,8 +335,6 @@ async function lerConfiguracoes(sheets, spreadsheetId) {
     }
     cfg.diasParaFolga = parseInt(cfg.diasParaFolga, 10) || CONFIG_PADRAO.diasParaFolga;
     if (cfg.diasParaFolga < 1) cfg.diasParaFolga = CONFIG_PADRAO.diasParaFolga;
-    const tol = parseInt(cfg.toleranciaCancelamentos, 10);
-    cfg.toleranciaCancelamentos = Number.isFinite(tol) && tol >= 0 ? tol : CONFIG_PADRAO.toleranciaCancelamentos;
     return cfg;
   } catch (e) {
     console.error("[lerConfiguracoes] ERRO:", e && e.message);
@@ -391,8 +391,7 @@ async function salvarConfiguracoes(sheets, spreadsheetId, patch) {
 //   3) a contagem e em SEQUENCIA: no primeiro dia invalido a contagem para e
 //      vale o que foi acumulado antes dele. Um buraco depois nao apaga o passado,
 //      mas os dias apos o buraco nao somam.
-function contarDiasTrabalhados(turnos, referenciaStr, progresso, tolerancia) {
-  if (tolerancia === undefined) tolerancia = CONFIG_PADRAO.toleranciaCancelamentos;
+function contarDiasTrabalhados(turnos, referenciaStr, progresso) {
   const refMs = referenciaStr ? parseDataPtBrParaMs(referenciaStr) : 0;
 
   // dias com turno (apos a ultima folga)
@@ -405,7 +404,7 @@ function contarDiasTrabalhados(turnos, referenciaStr, progresso, tolerancia) {
     if (refMs && ms <= refMs) return;
     diasComTurno.set(dataNorm, ms);
   });
-  if (diasComTurno.size === 0) return { validos: 0, comCancelamento: 0 };
+  if (diasComTurno.size === 0) return 0;
 
   // status das missoes por dia
   const missoesPorDia = new Map(); // data -> { total, concluidas }
@@ -417,10 +416,9 @@ function contarDiasTrabalhados(turnos, referenciaStr, progresso, tolerancia) {
     if (refMs && ms <= refMs) return;
     if (!diasComTurno.has(dataNorm)) return;
     const st = normalizarStatusMissao(pRow.status);
-    const reg = missoesPorDia.get(dataNorm) || { total: 0, concluidas: 0, canceladas: 0 };
+    const reg = missoesPorDia.get(dataNorm) || { total: 0, concluidas: 0 };
     reg.total += 1;
     if (st === 'Concluído') reg.concluidas += 1;
-    if (st === 'Cancelado') reg.canceladas += 1;
     missoesPorDia.set(dataNorm, reg);
   });
 
@@ -429,19 +427,14 @@ function contarDiasTrabalhados(turnos, referenciaStr, progresso, tolerancia) {
     .sort((a, b) => a[1] - b[1]);
 
   // conta em sequencia até o primeiro dia que reprova
-  // Tolerancia: ate N missoes "nao fazer hoje" (Cancelado) por dia; todas as
-  // demais precisam estar concluidas (e ao menos uma concluida).
   let validos = 0;
-  let comCancelamento = 0;
   for (const [dataStr] of ordenados) {
     const reg = missoesPorDia.get(dataStr);
-    const diaValido = !!reg && reg.total > 0 && reg.concluidas > 0 &&
-      reg.canceladas <= tolerancia && (reg.concluidas + reg.canceladas) === reg.total;
+    const diaValido = !!reg && reg.total > 0 && reg.concluidas === reg.total;
     if (!diaValido) break;
     validos += 1;
-    if (reg.canceladas > 0) comCancelamento += 1;
   }
-  return { validos, comCancelamento };
+  return validos;
 }
 
 // Devolve o estado do ciclo de folga para hoje.
@@ -451,10 +444,7 @@ function calcularCicloFolga(cfg, turnos, hojeStr, progresso) {
   const ultimaFolga = cfg.ultimaFolga ? normalizarData(cfg.ultimaFolga) : "";
 
   const trabalhouHoje = (turnos || []).some(t => normalizarData(t.data) === hojeStr);
-  const tolerancia = Number.isFinite(parseInt(cfg.toleranciaCancelamentos, 10)) ? parseInt(cfg.toleranciaCancelamentos, 10) : CONFIG_PADRAO.toleranciaCancelamentos;
-  const contagem = contarDiasTrabalhados(turnos, ultimaFolga, progresso, tolerancia);
-  const diasTrabalhados = contagem.validos;
-  const canceladasHoje = (progresso || []).filter(r => normalizarData(r.data) === hojeStr && normalizarStatusMissao(r.status) === 'Cancelado').length;
+  const diasTrabalhados = contarDiasTrabalhados(turnos, ultimaFolga, progresso);
 
   // "pularFolgaAte": se voce decidiu trabalhar no dia de folga, a folga
   // e empurrada para depois dessa data.
@@ -475,9 +465,6 @@ function calcularCicloFolga(cfg, turnos, hojeStr, progresso) {
   return {
     diasParaFolga: diasParaFolga,
     diasTrabalhados: diasTrabalhados,
-    diasComCancelamento: contagem.comCancelamento,
-    toleranciaCancelamentos: tolerancia,
-    canceladasHoje: canceladasHoje,
     faltam: faltam,
     cicloCheio: cicloCheio,
     modoTeste: modoTeste,
@@ -544,6 +531,8 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       let tempoMedio = mRow[mColMap["Tempo Médio (Minutos)"]] || "";
       let prioridade = mRow[mColMap["Prioridade"]] || "Média";
       let frequenciaDias = parseInt(mRow[mColMap["Frequência (Dias)"]] || 1, 10) || 1;
+      // Ordem de execucao escolhida no modal "Ordem" (0/"" = sem ordem).
+      let ordemMissao = parseInt(mRow[mColMap["Ordem"]] || 0, 10) || 0;
 
       if (titulo) {
         const tituloLower = chaveMissao(titulo, comodo);
@@ -589,7 +578,7 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
             if (pColMap["Hora de Início"] !== undefined) rowArray[pColMap["Hora de Início"]] = "";
             if (pColMap["Hora de Término"] !== undefined) rowArray[pColMap["Hora de Término"]] = "";
 
-            newRows.push(rowArray);
+            newRows.push({ rowArray, ordem: ordemMissao });
             titulosAdicionadosHoje.add(tituloLower);
             currentId++;
           }
@@ -597,12 +586,21 @@ async function sincronizarMissossDoDiaEmSegundoPlano(sheets, spreadsheetId) {
       }
     });
 
+    // Lanca na ordem escolhida (coluna "Ordem"). Sem ordem, mantem a ordem da planilha.
+    newRows.sort((a, b) => {
+      const oa = a.ordem || 0, ob = b.ordem || 0;
+      if (oa > 0 && ob > 0 && oa !== ob) return oa - ob;
+      if (oa > 0 && ob === 0) return -1;
+      if (oa === 0 && ob > 0) return 1;
+      return 0;
+    });
+
     if (newRows.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: `Progresso Diário!A${nextRow}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: newRows }
+        requestBody: { values: newRows.map(r => r.rowArray) }
       });
 
       // So formata quando linhas novas foram criadas. Sem linha nova, o formato
@@ -631,16 +629,61 @@ const TIPOS_META = {
 const RARIDADES = ["Comum", "Raro", "Épico", "Lendário"];
 
 const CONQUISTAS_INICIAIS = [
+  // --- Primeiros passos ---
   ["Primeiro Passo", "Conclua sua primeira missão.", "🧹", "Comum", "missoes_total", "", 1],
   ["Mãos à Obra", "Conclua 10 missões.", "🧽", "Comum", "missoes_total", "", 10],
   ["Faxineiro Dedicado", "Conclua 50 missões.", "🪣", "Raro", "missoes_total", "", 50],
+  ["Veterano do Pano", "Conclua 100 missões.", "🧴", "Raro", "missoes_total", "", 100],
   ["Mestre da Limpeza", "Conclua 200 missões.", "💎", "Épico", "missoes_total", "", 200],
+  ["Lenda Viva da Casa", "Conclua 500 missões.", "🌟", "Lendário", "missoes_total", "", 500],
+  ["Imortal do Esfregão", "Conclua 1000 missões.", "☄️", "Lendário", "missoes_total", "", 1000],
+
+  // --- Dias zerados ---
   ["Dia Zerado", "Conclua todas as missões de um dia.", "🏆", "Comum", "dias_zerados", "", 1],
+  ["Trio de Ouro", "Feche 3 dias zerados.", "🎯", "Comum", "dias_zerados", "", 3],
+  ["Dez de Dez", "Feche 10 dias zerados.", "🥇", "Raro", "dias_zerados", "", 10],
+  ["Mês Impecável", "Feche 30 dias zerados.", "📆", "Épico", "dias_zerados", "", 30],
+  ["Centurião", "Feche 100 dias zerados.", "🏛️", "Lendário", "dias_zerados", "", 100],
+
+  // --- Sequências ---
+  ["Embalo", "3 dias zerados em sequência.", "🎵", "Comum", "sequencia_dias", "", 3],
   ["Semana Impecável", "7 dias zerados em sequência.", "🔥", "Raro", "sequencia_dias", "", 7],
+  ["Quinzena de Ferro", "15 dias zerados em sequência.", "🛡️", "Épico", "sequencia_dias", "", 15],
   ["Lenda da Casa", "30 dias zerados em sequência.", "👑", "Lendário", "sequencia_dias", "", 30],
+  ["Máquina do Tempo", "60 dias zerados em sequência.", "⏳", "Lendário", "sequencia_dias", "", 60],
+
+  // --- Dias trabalhados ---
+  ["Primeiro Turno", "Trabalhe 1 dia.", "🕐", "Comum", "dias_trabalhados", "", 1],
   ["Ciclo Completo", "Trabalhe 9 dias.", "📅", "Raro", "dias_trabalhados", "", 9],
-  ["Relâmpago", "Economize 60 minutos no total.", "⚡", "Épico", "tempo_economizado", "", 60]
+  ["Meia Maratona", "Trabalhe 25 dias.", "🏃", "Raro", "dias_trabalhados", "", 25],
+  ["Cinquentão", "Trabalhe 50 dias.", "🎖️", "Épico", "dias_trabalhados", "", 50],
+  ["Centenário", "Trabalhe 100 dias.", "💯", "Lendário", "dias_trabalhados", "", 100],
+  ["Ano de Serviço", "Trabalhe 365 dias.", "🗓️", "Lendário", "dias_trabalhados", "", 365],
+
+  // --- Tempo economizado ---
+  ["Relâmpago", "Economize 60 minutos no total.", "⚡", "Épico", "tempo_economizado", "", 60],
+  ["Cronômetro Quebrado", "Economize 120 minutos no total.", "⏱️", "Raro", "tempo_economizado", "", 120],
+  ["Meio Dia Livre", "Economize 480 minutos (8 horas) no total.", "🌤️", "Épico", "tempo_economizado", "", 480],
+  ["Férias Antecipadas", "Economize 1440 minutos (24 horas) no total.", "🏖️", "Lendário", "tempo_economizado", "", 1440],
+  ["Doador de Tempo", "Economize 2880 minutos (48 horas) no total.", "⌛", "Lendário", "tempo_economizado", "", 2880],
+
+  // --- Por cômodo ---
+  ["Cozinheiro de Elite", "Conclua 25 missões na Cozinha.", "🍳", "Raro", "missoes_comodo", "Cozinha", 25],
+  ["Chef Estrelado", "Conclua 100 missões na Cozinha.", "👨‍🍳", "Épico", "missoes_comodo", "Cozinha", 100],
+  ["Banheiro Brilhando", "Conclua 25 missões no Banheiro.", "🚿", "Raro", "missoes_comodo", "Banheiro", 25],
+  ["Sanitário Perfeito", "Conclua 100 missões no Banheiro.", "🧼", "Épico", "missoes_comodo", "Banheiro", 100],
+  ["Quarto dos Sonhos", "Conclua 25 missões no Quarto.", "🛏️", "Raro", "missoes_comodo", "Quarto", 25],
+  ["Sono dos Justos", "Conclua 100 missões no Quarto.", "😴", "Épico", "missoes_comodo", "Quarto", 100],
+  ["Sala de Estar VIP", "Conclua 25 missões na Sala.", "🛋️", "Raro", "missoes_comodo", "Sala", 25],
+  ["Cinema em Casa", "Conclua 100 missões na Sala.", "📺", "Épico", "missoes_comodo", "Sala", 100],
+  ["Roupa no Varal", "Conclua 25 missões na Lavanderia.", "🧺", "Raro", "missoes_comodo", "Lavanderia", 25],
+  ["Lavanderia Industrial", "Conclua 100 missões na Lavanderia.", "🌀", "Épico", "missoes_comodo", "Lavanderia", 100],
+  ["Jardineiro Caprichoso", "Conclua 25 missões no Quintal.", "🌱", "Raro", "missoes_comodo", "Quintal", 25],
+  ["Guardião do Quintal", "Conclua 100 missões no Quintal.", "🌳", "Épico", "missoes_comodo", "Quintal", 100],
+  ["Corredor Impecável", "Conclua 25 missões no Corredor.", "🚪", "Raro", "missoes_comodo", "Corredor", 25],
+  ["Passagem Limpa", "Conclua 100 missões no Corredor.", "✨", "Épico", "missoes_comodo", "Corredor", 100]
 ];
+
 
 function chaveTipoMeta(valor) {
   const v = String(valor || "").trim();
@@ -708,6 +751,46 @@ async function lerConquistasBrutas(sheets, spreadsheetId) {
   return { lista, colMap, totalLinhas: rows.length, rows };
 }
 
+// Acrescenta na aba Conquistas as conquistas do catalogo (CONQUISTAS_INICIAIS)
+// que ainda nao existem la, sem mexer nas que o usuario criou nem no progresso
+// das que ja existem. Roda antes de avaliar, entao conquistas novas entram
+// desbloqueadas na hora se a meta ja foi batida.
+async function garantirConquistasDoCatalogo(sheets, spreadsheetId, lista, colMap) {
+  const existentes = new Set((lista || []).map(c => normTxt(c.titulo)));
+  const faltando = CONQUISTAS_INICIAIS.filter(c => !existentes.has(normTxt(c[0])));
+  if (faltando.length === 0) return 0;
+  if (!colMap || Object.keys(colMap).length === 0) return 0;
+
+  let maxId = 1000;
+  (lista || []).forEach(c => { const n = parseInt(c.id, 10); if (!isNaN(n) && n > maxId) maxId = n; });
+
+  const ordem = COLS_CONQUISTAS.filter(n => colMap[n] !== undefined);
+  const data = [];
+  faltando.forEach((c, i) => {
+    const linha = LINHA_CABECALHO + 2 + (lista || []).length + i;
+    const valores = {
+      "ID": maxId + 1 + i,
+      "Título": c[0],
+      "Descrição": c[1],
+      "Ícone": c[2],
+      "Raridade": c[3],
+      "Tipo de Meta": TIPOS_META[c[4]] || c[4],
+      "Filtro": c[5],
+      "Meta": c[6],
+      "Progresso Atual": 0,
+      "Status": "Bloqueada",
+      "Data Conquista": ""
+    };
+    ordem.forEach(nome => {
+      data.push({ range: `${ABA_CONQUISTAS}!${columnToLetter(colMap[nome] + 1)}${linha}`, values: [[valores[nome]]] });
+    });
+  });
+
+  await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'RAW', data } });
+  await formatarTabelaCompleta(sheets, spreadsheetId, ABA_CONQUISTAS);
+  return faltando.length;
+}
+
 function calcularMetricasConquistas(progresso, turnos) {
   const concl = (progresso || []).filter(p => p.status === 'Concluído');
 
@@ -767,6 +850,20 @@ async function avaliarConquistas(sheets, spreadsheetId) {
   const turnos = await getSheetData(sheets, spreadsheetId, "Registro de Ponto!A:Z");
   const metricas = calcularMetricasConquistas(progresso, turnos);
   const { lista, colMap } = await lerConquistasBrutas(sheets, spreadsheetId);
+
+  // Conquistas novas do catalogo entram na planilha sozinhas (uma vez cada).
+  try {
+    const adicionadas = await garantirConquistasDoCatalogo(sheets, spreadsheetId, lista, colMap);
+    if (adicionadas > 0) {
+      const relido = await lerConquistasBrutas(sheets, spreadsheetId);
+      lista.length = 0;
+      relido.lista.forEach(c => lista.push(c));
+      Object.keys(colMap).forEach(k => delete colMap[k]);
+      Object.keys(relido.colMap).forEach(k => { colMap[k] = relido.colMap[k]; });
+    }
+  } catch (eCat) {
+    console.error("[avaliarConquistas] falha ao adicionar conquistas do catalogo:", eCat && eCat.message);
+  }
 
   const agoraStr = `${getDataHojeStr()} ${getHoraAtualStr().slice(0, 5)}`;
   const updates = [];
@@ -1379,6 +1476,64 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json({ status: "success", atualizou: true, linha: mLinhaAlvo });
+      }
+
+      if (acao === 'salvarOrdem') {
+        // data.itens = [{ titulo, comodo, ordem }, ...]
+        const itens = Array.isArray(data.itens) ? data.itens : [];
+        if (itens.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'Nenhuma missão informada.' });
+        }
+
+        const missoesRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: "Missões!A:Z" });
+        const mParsed = parseSheetRows(missoesRes.data.values || []);
+        const mColMap = mParsed.colMap;
+
+        // Cria a coluna "Ordem" se ela ainda nao existir (ultima coluna do cabecalho)
+        if (mColMap["Ordem"] === undefined) {
+          const cols = Object.values(mColMap);
+          const novaCol = (cols.length > 0 ? Math.max(...cols) : 5) + 1;
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `Missões!${columnToLetter(novaCol + 1)}2`,
+            valueInputOption: 'RAW',
+            requestBody: { values: [["Ordem"]] }
+          });
+          mColMap["Ordem"] = novaCol;
+        }
+
+        const atualizacoes = [];
+        itens.forEach(item => {
+          const tituloBusca = String(item.titulo || "").trim().toLowerCase();
+          const comodoBusca = String(item.comodo || "").trim().toLowerCase();
+          const ordem = parseInt(item.ordem, 10);
+          if (!tituloBusca || !Number.isFinite(ordem)) return;
+
+          let mLinhaAlvo = -1;
+          mParsed.dataRows.forEach((row, idx) => {
+            const tVal = String(row[mColMap["Título da Missão"]] || "").trim().toLowerCase();
+            if (tVal !== tituloBusca) return;
+            if (comodoBusca && mColMap["Cômodo"] !== undefined) {
+              const cVal = String(row[mColMap["Cômodo"]] || "").trim().toLowerCase();
+              if (cVal !== comodoBusca) return;
+            }
+            mLinhaAlvo = idx + mParsed.headerRowIndex + 2;
+          });
+          if (mLinhaAlvo === -1) return;
+
+          atualizacoes.push({
+            range: `Missões!${columnToLetter(mColMap["Ordem"] + 1)}${mLinhaAlvo}`,
+            values: [[ordem]]
+          });
+        });
+
+        if (atualizacoes.length > 0) {
+          await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId,
+            requestBody: { valueInputOption: 'USER_ENTERED', data: atualizacoes }
+          });
+        }
+        return res.status(200).json({ status: "success", atualizadas: atualizacoes.length });
       }
 
       if (acao === 'excluirLinhas') {
