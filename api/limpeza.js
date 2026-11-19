@@ -215,6 +215,8 @@ const BORDA_CABECALHO = { style: "SOLID", color: COR_PRETA };
 const FOLGA_LARGURA_COLUNA = 0.10;
 // Largura fixa da coluna 1 (a faixa em branco antes do ID), igual em todas as abas.
 const LARGURA_COLUNA_1 = 40;
+// Largura de uma coluna sem nenhum dado abaixo do cabecalho.
+const LARGURA_COLUNA_VAZIA = 90;
 
 // Largura aproximada de um texto no Roboto 10 (px por caractere).
 // Caracteres largos contam mais: W, M, O, acentos, digito monoespacado.
@@ -237,9 +239,31 @@ function larguraTextoPx(texto, negrito) {
 
 // Devolve, para cada coluna pedida, a largura final (px): maior texto da coluna
 // + respiro (padding de celula + icone de filtro) + 10% de folga.
+// Uma coluna "tem dado" quando existe algum valor abaixo do cabecalho.
+function colunaTemDado(rows, headerRowIndex, c) {
+  for (let i = headerRowIndex + 1; i < rows.length; i++) {
+    const v = rows[i] && rows[i][c];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return true;
+  }
+  return false;
+}
+
+// Ultima coluna que tem dado (corta colunas vazias da direita).
+function ultimaColunaComDado(rows, headerRowIndex, startColumnIndex, endColumnIndex) {
+  for (let c = endColumnIndex - 1; c >= startColumnIndex; c--) {
+    if (colunaTemDado(rows, headerRowIndex, c)) return c;
+  }
+  return -1;
+}
+
 function calcularLargurasDasColunas(rows, headerRowIndex, colMap, startColumnIndex, endColumnIndex) {
   const larguras = new Map();
   for (let c = startColumnIndex; c < endColumnIndex; c++) {
+    // Coluna sem dado: largura padrao, para nao abrir um "vazio" gigante na tabela.
+    if (!colunaTemDado(rows, headerRowIndex, c)) {
+      larguras.set(c, LARGURA_COLUNA_VAZIA);
+      continue;
+    }
     let maiorCabecalho = 0;
     let maiorCorpo = 0;
     rows.forEach((row, i) => {
@@ -345,8 +369,11 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
       }
     }
 
-    const startColumnIndex = Math.min(...validColIndexes);
-    const endColumnIndex = Math.max(...validColIndexes) + 1;
+    const primeiraCol = Math.min(...validColIndexes);
+    const ultimaColDado = ultimaColunaComDado(rows, headerRowIndex, primeiraCol, Math.max(...validColIndexes) + 1);
+    // Sem nenhuma linha de dado: formata so o cabecalho (nada de borda no vazio).
+    const startColumnIndex = primeiraCol;
+    const endColumnIndex = ultimaColDado >= primeiraCol ? ultimaColDado + 1 : Math.max(...validColIndexes) + 1;
 
     let requests = [
       {
