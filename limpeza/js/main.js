@@ -1996,6 +1996,22 @@ function moverMissaoOrdem(pos, direcao) {
 async function salvarOrdemMissoes() {
     if (ordemSalvando) return;
     ordemSalvando = true;
+
+    // O envio para a planilha demora: o botao avisa o que esta acontecendo.
+    const btnSalvar = document.getElementById('btnSalvarOrdem');
+    const rotuloOriginal = btnSalvar ? btnSalvar.innerText : '';
+    const travarBotao = (texto) => {
+        if (!btnSalvar) return;
+        btnSalvar.disabled = true;
+        btnSalvar.innerText = texto;
+    };
+    const soltarBotao = () => {
+        if (!btnSalvar) return;
+        btnSalvar.disabled = false;
+        btnSalvar.innerText = rotuloOriginal || 'Salvar Ordem';
+    };
+    travarBotao('Enviando...');
+
     try {
         // A ordem E a posicao: a planilha e reescrita nessa sequencia.
         const itens = ordemMissoes.map(m => ({ titulo: m.titulo, comodo: m.comodo }));
@@ -2019,16 +2035,28 @@ async function salvarOrdemMissoes() {
         const json = await resp.json();
         if (!json || json.status !== 'success') {
             mostrarNotificacao('Atenção', (json && json.message) || 'Não foi possível salvar a ordem.', 'aviso', 3500);
+            soltarBotao();
             return;
         }
+        // IDs foram reescritos (1001, 1002...): atualiza o catalogo local na hora
+        if (Array.isArray(json.missoes) && Array.isArray(catalogoMissoes)) {
+            json.missoes.forEach(item => {
+                const achou = catalogoMissoes.find(c =>
+                    normalizarBusca(c.titulo) === normalizarBusca(item.titulo) &&
+                    normalizarBusca(c.comodo || '') === normalizarBusca(item.comodo || ''));
+                if (achou) achou.id = item.id;
+            });
+            salvarDadosLocalStorage();
+        }
         fecharModalOrdemMissoes();
-        mostrarNotificacao('Ordem salva', 'A planilha foi reescrita nessa sequência.', 'sucesso', 2500);
+        mostrarNotificacao('Ordem salva', 'A planilha foi reescrita nessa sequência, com os IDs renumerados.', 'sucesso', 2500);
         await carregarDadosDoServidor(false);
     } catch (e) {
         console.error('[salvarOrdemMissoes]', e);
         mostrarNotificacao('Erro', 'Falha ao salvar a ordem das missões.', 'aviso', 3500);
     } finally {
         ordemSalvando = false;
+        soltarBotao();
     }
 }
 
