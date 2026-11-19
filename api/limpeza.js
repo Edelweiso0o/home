@@ -115,6 +115,9 @@ const ROTULO_ABA = {
 };
 
 // Colunas que devem aparecer na previa de cada aba.
+// Primeiro ID da sequencia reescrita ao salvar a ordem das missoes.
+const ID_INICIAL_MISSOES = 1001;
+
 const COLUNAS_PREVIA = {
   "Missões": ["ID", "Título da Missão", "Cômodo", "Tempo Estimado (Minutos)", "Frequência (Dias)", "Prioridade", "Ordem"],
   "Progresso Diário": ["ID", "Data", "Título da Missão", "Cômodo", "Status", "Hora de Início", "Hora de Término"],
@@ -307,6 +310,13 @@ async function formatarTabelaCompleta(sheets, spreadsheetId, sheetName) {
         range: { sheetId, startRowIndex, endRowIndex: startRowIndex + 1, startColumnIndex, endColumnIndex },
         bottom: BORDA_CABECALHO,
         innerVertical: BORDA_CABECALHO
+      }
+    });
+
+    // 4) Autoajuste da largura das colunas da tabela
+    requests.push({
+      autoResizeDimensions: {
+        dimensions: { sheetId, dimension: "COLUMNS", startIndex: startColumnIndex, endIndex: endColumnIndex }
       }
     });
 
@@ -1528,8 +1538,11 @@ export default async function handler(req, res) {
           return res.status(400).json({ status: 'error', message: 'Nenhuma missão encontrada na planilha.' });
         }
 
-        const linhas = ordenadas.map(row => {
-          const arr = Array.from({ length: largura }, (_, i) => row[i] !== undefined ? row[i] : "");
+        // IDs reescritos na sequencia: 1001, 1002, 1003...
+        const colId = mColMap["ID"];
+        const linhas = ordenadas.map((row, i) => {
+          const arr = Array.from({ length: largura }, (_, c) => row[c] !== undefined ? row[c] : "");
+          if (colId !== undefined) arr[colId] = ID_INICIAL_MISSOES + i;
           return arr;
         });
 
@@ -1541,27 +1554,17 @@ export default async function handler(req, res) {
           requestBody: { values: linhas }
         });
 
-        // A coluna "Ordem" (criada na versao anterior) sai: a ordem agora e a posicao.
-        // Ela e a ULTIMA coluna, entao apagar a coluna nao desalinha os dados.
-        const ultimaCol = Math.max(...Object.values(mColMap));
-        if (mColMap["Ordem"] !== undefined && mColMap["Ordem"] === ultimaCol) {
-          try {
-            const sheetIdRes = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets(properties(sheetId,title))' });
-            const aba = (sheetIdRes.data.sheets || []).find(s => s.properties && s.properties.title === "Missões");
-            if (aba) {
-              await sheets.spreadsheets.batchUpdate({
-                spreadsheetId,
-                requestBody: {
-                  requests: [{ deleteDimension: { range: { sheetId: aba.properties.sheetId, dimension: 'COLUMNS', startIndex: mColMap["Ordem"], endIndex: mColMap["Ordem"] + 1 } } }]
-                }
-              });
-            }
-          } catch (eDel) {
-            console.error("[salvarOrdem] nao consegui remover a coluna Ordem:", eDel && eDel.message);
-          }
-        }
+        // Reaplica formato + autoajuste das colunas na aba Missoes
+        await formatarTabelaCompleta(sheets, spreadsheetId, "Missões");
 
-        return res.status(200).json({ status: "success", reordenadas: linhas.length });
+        // Devolve titulo/comodo/ID novos para o front atualizar o catalogo local.
+        const missoesAtualizadas = ordenadas.map((row, i) => ({
+          titulo: colTitulo !== undefined ? String(row[colTitulo] || '') : '',
+          comodo: colComodo !== undefined ? String(row[colComodo] || '') : '',
+          id: ID_INICIAL_MISSOES + i
+        }));
+
+        return res.status(200).json({ status: "success", reordenadas: linhas.length, missoes: missoesAtualizadas });
       }
 
       if (acao === 'excluirLinhas') {
