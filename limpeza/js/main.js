@@ -1317,6 +1317,11 @@ function abrirModalEdicao(id) {
         return;
     }
 
+    if (missao.estadoMissao === 'EmAndamento' || missao.status === 'Em Andamento') {
+        mostrarNotificacao("Bloqueado", "Missão em andamento não pode ser editada. Finalize antes.", "aviso");
+        return;
+    }
+
     const elId = document.getElementById('editIdMissao');
     const elTituloOriginal = document.getElementById('editTituloOriginal');
     const elTitulo = document.getElementById('editInputTitulo');
@@ -1349,6 +1354,14 @@ async function salvarEdicaoMissao(event) {
     const tituloOriginal = document.getElementById('editTituloOriginal').value;
     const missao = encontrarMissaoHoje(id);
     if (!missao) return;
+
+    // Missao em andamento nao pode ser editada (o botao ja fica oculto,
+    // isto e a trava caso o modal seja aberto por outro caminho).
+    if (missao.estadoMissao === 'EmAndamento' || missao.status === 'Em Andamento') {
+        mostrarNotificacao("Bloqueado", "Missão em andamento não pode ser editada. Finalize antes.", "aviso");
+        fecharModalEdicao();
+        return;
+    }
 
     const tituloNovo = document.getElementById('editInputTitulo').value.trim();
     const comodoNovo = document.getElementById('editSelectComodo').value;
@@ -1546,6 +1559,13 @@ function renderizarMissoes() {
         const aEmAndamento = (a.estadoMissao === 'EmAndamento' || a.status === 'Em Andamento') ? 0 : 1;
         const bEmAndamento = (b.estadoMissao === 'EmAndamento' || b.status === 'Em Andamento') ? 0 : 1;
         if (aEmAndamento !== bEmAndamento) return aEmAndamento - bEmAndamento;
+        // A ordem vem da coluna "Ordem" da aba Missões (modal Ordem).
+        // Sem ordem definida (0), cai na prioridade de sempre.
+        const oa = parseInt(a.ordem, 10) || 0;
+        const ob = parseInt(b.ordem, 10) || 0;
+        if (oa > 0 && ob > 0 && oa !== ob) return oa - ob;
+        if (oa > 0 && ob === 0) return -1;
+        if (oa === 0 && ob > 0) return 1;
         return (pesoPrioridade[a.prioridade] || 2) - (pesoPrioridade[b.prioridade] || 2);
     });
 
@@ -1713,10 +1733,8 @@ function renderizarMissoes() {
             `;
         } else {
             statusBadge = '<span class="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono-code animate-pulse">EM ANDAMENTO</span>';
+            // Missao em andamento nao pode ser editada: sem botao de edicao.
             botoesAcao = `
-                <button onclick="abrirModalEdicao('${m.id}')" class="text-purple-300/50 hover:text-purple-300 px-2 py-2 text-xs transition mr-1" title="Editar">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
                 <div class="flex items-center space-x-2 mr-2 font-mono-code text-xs text-amber-400 bg-[#090614] px-2.5 py-1 rounded-lg border border-amber-500/30">
                     <i class="fa-solid fa-stopwatch animate-spin"></i>
                     <span id="timer-missao-${m.id}">00:00:00</span>
@@ -1776,19 +1794,29 @@ function renderizarHistoricoGeral() {
     const fStatus = document.getElementById('filtroHistoricoStatus').value;
     const inputDataVal = document.getElementById('filtroHistoricoData').value; 
 
+    // A data da missao pode chegar em formatos diferentes ("11/11/2026",
+    // serial do Sheets, ISO, ou com hora junto). normalizarDataDeMissao
+    // padroniza tudo em DD/MM/AAAA antes de comparar, senao o filtro por
+    // data nao trazia todas as linhas.
     let fDataFormatted = '';
     if (inputDataVal) {
         const [ano, mes, dia] = inputDataVal.split('-');
         fDataFormatted = `${dia}/${mes}/${ano}`;
     }
 
+    const dataDe = m => normalizarDataDeMissao(m && m.data);
+
     let filtradas = missoes.filter(m => {
         if (fComodo !== 'TODOS' && m.comodo !== fComodo) return false;
         const st = (m.status || 'Pendente').trim();
         if (fStatus !== 'TODOS' && st !== fStatus) return false;
-        if (fDataFormatted !== '' && !(m.data || '').includes(fDataFormatted)) return false;
+        if (fDataFormatted !== '' && dataDe(m) !== fDataFormatted) return false;
         return true;
     });
+
+    // Mais recente primeiro (por data, depois por ID/linha)
+    const msDe = m => { const d = dataDe(m).split('/'); return d.length === 3 ? new Date(+d[2], +d[1] - 1, +d[0]).getTime() : 0; };
+    filtradas.sort((a, b) => (msDe(b) - msDe(a)) || ((parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0)));
 
     if (filtradas.length === 0) {
         container.innerHTML = `
@@ -1831,6 +1859,170 @@ function limparFiltroData() {
     if (el) {
         el.value = '';
         renderizarHistoricoGeral();
+    }
+}
+
+// Converte qualquer data de missao para "DD/MM/AAAA".
+// Aceita "11/11/2026", "2026-11-11", "11/11/2026 08:30", serial do Sheets (46327)
+// e vazio (-> ""). E o que faz o filtro por data do historico trazer tudo.
+function normalizarDataDeMissao(valor) {
+    const bruto = String(valor == null ? '' : valor).trim();
+    if (!bruto) return '';
+
+    if (/^\d+(\.\d+)?$/.test(bruto)) {
+        const serial = parseFloat(bruto);
+        if (serial > 0 && serial < 100000) {
+            const ms = Math.round((serial - 25559) * 86400 * 1000);
+            const d = new Date(ms);
+            if (!isNaN(d.getTime())) {
+                return String(d.getUTCDate()).padStart(2, '0') + '/' +
+                       String(d.getUTCMonth() + 1).padStart(2, '0') + '/' +
+                       d.getUTCFullYear();
+            }
+        }
+        return '';
+    }
+
+    const iso = bruto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+
+    const ptBr = bruto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (ptBr) {
+        return String(ptBr[1]).padStart(2, '0') + '/' + String(ptBr[2]).padStart(2, '0') + '/' + ptBr[3];
+    }
+    return '';
+}
+
+// =====================================================================
+// ORDEM DE EXECUCAO DAS MISSOES
+// A ordem fica na coluna "Ordem" da aba Missoes. As missoes do dia sao
+// lancadas na ordem da planilha; com a coluna preenchida, o lancamento
+// passa a respeitar essa ordem.
+// =====================================================================
+let ordemMissoes = [];   // copia de trabalho enquanto o modal esta aberto
+let ordemSalvando = false;
+
+function abrirModalOrdemMissoes() {
+    const modal = document.getElementById('modalOrdemMissoes');
+    if (!modal) return;
+    const busca = document.getElementById('buscaOrdem');
+    if (busca) busca.value = '';
+
+    // Fonte: catalogo da aba Missoes (todas as cadastradas).
+    const fonte = (catalogoMissoes && catalogoMissoes.length > 0) ? catalogoMissoes : missoes;
+    ordemMissoes = fonte
+        .filter(m => m && m.titulo)
+        .map(m => ({
+            titulo: String(m.titulo || '').trim(),
+            comodo: String(m.comodo || '').trim(),
+            prioridade: m.prioridade || 'Média',
+            ordem: parseInt(m.ordem, 10) || 0
+        }));
+
+    // Sem ordem definida: mantem a ordem da planilha (que e a de lancamento)
+    const semOrdem = ordemMissoes.every(m => !m.ordem);
+    if (semOrdem) ordemMissoes.forEach((m, i) => { m.ordem = i + 1; });
+    ordemMissoes.sort((a, b) => (a.ordem || 9999) - (b.ordem || 9999));
+
+    renderizarListaOrdem('');
+    modal.classList.remove('hidden');
+}
+
+function fecharModalOrdemMissoes() {
+    const modal = document.getElementById('modalOrdemMissoes');
+    if (modal) modal.classList.add('hidden');
+}
+
+function filtrarListaOrdem() {
+    const campo = document.getElementById('buscaOrdem');
+    renderizarListaOrdem(campo ? campo.value : '');
+}
+
+function renderizarListaOrdem(termo) {
+    const container = document.getElementById('listaOrdemMissoes');
+    const contador = document.getElementById('contadorOrdem');
+    if (!container) return;
+
+    if (contador) contador.innerText = `${ordemMissoes.length} missão(ões) cadastrada(s)`;
+
+    const lista = filtrarPorBusca(ordemMissoes, termo, ['titulo', 'comodo']);
+    if (lista.length === 0) {
+        container.innerHTML = '<p class="text-xs text-purple-300/50 text-center py-6">Nenhuma missão encontrada.</p>';
+        return;
+    }
+
+    const corPrioridade = { 'Alta': 'text-amber-300 border-amber-500/40', 'Média': 'text-purple-300 border-purple-500/40', 'Baixa': 'text-slate-300 border-slate-500/40' };
+
+    container.innerHTML = lista.map(m => {
+        const pos = ordemMissoes.indexOf(m);
+        const primeiro = pos === 0;
+        const ultimo = pos === ordemMissoes.length - 1;
+        const tituloEsc = escHtml(m.titulo).replace(/'/g, '&#39;');
+        return `
+            <div class="flex items-center justify-between gap-3 bg-[#090614] border border-purple-900/60 rounded-xl px-3 py-2">
+                <div class="flex items-center gap-3 min-w-0">
+                    <span class="w-7 h-7 shrink-0 rounded-lg bg-[#231a42] border border-purple-800/60 flex items-center justify-center text-[11px] font-bold font-mono-code text-emerald-300">${pos + 1}</span>
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-white truncate">${escHtml(m.titulo)}</div>
+                        <div class="text-[10px] text-purple-300/60 font-mono-code">${escHtml(m.comodo || 'Sem cômodo')} • <span class="${(corPrioridade[m.prioridade] || corPrioridade['Média']).split(' ')[0]}">${escHtml(m.prioridade || 'Média')}</span></div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-1 shrink-0">
+                    <button onclick="moverMissaoOrdem(${pos}, -1)" ${primeiro ? 'disabled' : ''} class="w-7 h-7 rounded-lg bg-[#17112d] border border-purple-900/70 text-purple-300 hover:text-white hover:border-purple-500 transition disabled:opacity-25 disabled:cursor-not-allowed" title="Subir">
+                        <i class="fa-solid fa-chevron-up text-[10px]"></i>
+                    </button>
+                    <button onclick="moverMissaoOrdem(${pos}, 1)" ${ultimo ? 'disabled' : ''} class="w-7 h-7 rounded-lg bg-[#17112d] border border-purple-900/70 text-purple-300 hover:text-white hover:border-purple-500 transition disabled:opacity-25 disabled:cursor-not-allowed" title="Descer">
+                        <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                    </button>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function moverMissaoOrdem(pos, direcao) {
+    const alvo = pos + direcao;
+    if (pos < 0 || pos >= ordemMissoes.length || alvo < 0 || alvo >= ordemMissoes.length) return;
+    const item = ordemMissoes[pos];
+    ordemMissoes[pos] = ordemMissoes[alvo];
+    ordemMissoes[alvo] = item;
+    ordemMissoes.forEach((m, i) => { m.ordem = i + 1; });
+    const campo = document.getElementById('buscaOrdem');
+    renderizarListaOrdem(campo ? campo.value : '');
+}
+
+async function salvarOrdemMissoes() {
+    if (ordemSalvando) return;
+    ordemSalvando = true;
+    try {
+        const itens = ordemMissoes.map((m, i) => ({ titulo: m.titulo, comodo: m.comodo, ordem: i + 1 }));
+
+        // Atualiza o estado local na hora (a fila ja respeita a ordem)
+        [catalogoMissoes, missoes].forEach(arr => {
+            (arr || []).forEach(m => {
+                const achou = itens.find(i => normalizarBusca(i.titulo) === normalizarBusca(m.titulo) && normalizarBusca(i.comodo) === normalizarBusca(m.comodo || ''));
+                if (achou) m.ordem = achou.ordem;
+            });
+        });
+        salvarDadosLocalStorage();
+        renderizarMissoes();
+
+        const resp = await chamarAPI(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ acao: 'salvarOrdem', itens })
+        });
+        const json = await resp.json();
+        if (!json || json.status !== 'success') {
+            mostrarNotificacao('Atenção', (json && json.message) || 'Não foi possível salvar a ordem.', 'aviso', 3500);
+            return;
+        }
+        fecharModalOrdemMissoes();
+        mostrarNotificacao('Ordem salva', 'As missões serão lançadas nessa ordem.', 'sucesso', 2500);
+        await carregarDadosDoServidor(false);
+    } catch (e) {
+        console.error('[salvarOrdemMissoes]', e);
+        mostrarNotificacao('Erro', 'Falha ao salvar a ordem das missões.', 'aviso', 3500);
+    } finally {
+        ordemSalvando = false;
     }
 }
 
@@ -1933,9 +2125,9 @@ function atualizarOcioso() {
     });
     const ocioso = Math.floor((agora - estadoPonto.inicioTurnoMs) / 1000) - emMissao;
     el.innerText = fmtHMS(ocioso);
-    el.className = 'font-bold ' + (rodando ? 'text-slate-400' : 'text-rose-300');
-    const rot = document.getElementById('statOciosoPausa');
-    if (rot) rot.innerText = rodando ? '(pausado)' : '';
+    // Pausado: o proprio numero pisca em vermelho. Sem texto extra na tela,
+    // senao o card muda de altura e a pagina inteira fica pulando.
+    el.className = 'font-bold tabular-nums ' + (rodando ? 'ocioso-pausado' : 'text-rose-300');
 }
 
 function fmtMin(min) {
